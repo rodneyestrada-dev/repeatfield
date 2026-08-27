@@ -127,7 +127,7 @@ test("meaningful edits require custom exit confirmation and cancel preserves the
   fireEvent.click(screen.getByRole("button", { name: /keep editing/i }));
   expect(screen.getByRole("slider", { name: "Gap" })).toHaveValue("18");
   fireEvent.click(screen.getByRole("button", { name: /Workflows/ }));
-  fireEvent.click(screen.getByRole("button", { name: /leave project/i }));
+  fireEvent.click(screen.getByRole("button", { name: /discard and leave/i }));
   expect(screen.getByRole("heading", { name: /what are you making/i })).toBeVisible();
 });
 

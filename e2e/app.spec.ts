@@ -112,8 +112,24 @@ test("field upload reloads with the same durable pixels and a new project is iso
   await expect(page.getByText("source-tile.jpg")).toBeVisible();
   await expect.poll(() => page.getByTestId("pattern-canvas").evaluate((c: HTMLCanvasElement) => c.toDataURL())).toBe(uploaded);
   await page.getByRole("button", { name: /Workflows/ }).click();
-  await page.getByRole("button", { name: /Leave project/ }).click();
+  await page.getByRole("button", { name: /Discard and leave/ }).click();
   expect(await page.evaluate(() => (window as unknown as { __revoked: string[] }).__revoked.length)).toBeGreaterThan(0);
+  const orphaned = await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("repeatfield-assets-v1", 1);
+      request.onupgradeneeded = () => request.result.createObjectStore("assets");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const count = await new Promise<number>((resolve, reject) => {
+      const request = db.transaction("assets").objectStore("assets").count();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    return count;
+  });
+  expect(orphaned).toBe(0);
   await page.getByRole("button", { name: /Field Tile/ }).click();
   await expect(page.getByText("Demo tile")).toBeVisible();
   const fresh = await page.getByTestId("pattern-canvas").evaluate((c: HTMLCanvasElement) => c.toDataURL());

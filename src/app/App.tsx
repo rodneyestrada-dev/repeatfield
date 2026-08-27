@@ -12,7 +12,7 @@ import {
   type WorkflowKind,
 } from "./state";
 import { useImage } from "./common";
-import { loadAsset, saveAsset } from "./assetStore";
+import { deleteAsset, deleteProjectAssets, loadAsset, saveAsset } from "./assetStore";
 import { FieldTileEditor } from "./FieldTileEditor";
 import { TileSetEditor } from "./TileSetEditor";
 import { TessellateEditor } from "./TessellateEditor";
@@ -263,6 +263,18 @@ export function App() {
 
   const stages = STAGE_LABELS[project.workflow];
 
+  const replaceAsset = async (previous: BrowserAssetRef | null | undefined, file: File) => {
+    const asset = await saveAsset(project.id, file);
+    if (previous && previous.kind === "indexeddb")
+      void deleteAsset(project.id, previous).catch(() => {});
+    return asset;
+  };
+
+  const closeProject = () => {
+    void deleteProjectAssets(project.id).catch(() => {});
+    dispatch({ type: "close-project" });
+  };
+
   const header = (
     <header className="topbar" role="banner">
       <div className="brand">
@@ -296,7 +308,7 @@ export function App() {
           className="back-to-workflows"
           onClick={() => {
             if (isProjectDirty(project)) setExitPrompt(true);
-            else dispatch({ type: "close-project" });
+            else closeProject();
           }}
         >
           ← Workflows
@@ -310,13 +322,16 @@ export function App() {
     <div className="modal-backdrop">
       <div role="dialog" aria-modal="true" aria-labelledby="leave-project-title" className="confirm-dialog">
         <h2 id="leave-project-title">Leave this project?</h2>
-        <p>Your edits are saved locally, but leaving closes this working project.</p>
+        <p>
+          Leaving closes this project and permanently discards its edits and
+          uploaded images from this browser.
+        </p>
         <div className="dialog-actions">
           <button onClick={() => setExitPrompt(false)}>Keep editing</button>
           <button className="primary" onClick={() => {
             setExitPrompt(false);
-            dispatch({ type: "close-project" });
-          }}>Leave project</button>
+            closeProject();
+          }}>Discard and leave</button>
         </div>
       </div>
     </div>
@@ -332,7 +347,11 @@ export function App() {
           />
           <strong>{project.sourceAsset?.name ?? "Asset unavailable"}</strong>
           <small>
-            {img ? `${img.naturalWidth} × ${img.naturalHeight}` : "Loading…"}
+            {img
+              ? `${img.naturalWidth} × ${img.naturalHeight}`
+              : project.sourceAsset && fieldSrc === null
+                ? "Asset unavailable"
+                : "Loading…"}
           </small>
         </div>
         <label className="button">
@@ -344,7 +363,7 @@ export function App() {
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file || !["image/png", "image/jpeg", "image/webp"].includes(file.type) || !file.size) return;
-              const asset = await saveAsset(project.id, file);
+              const asset = await replaceAsset(project.sourceAsset, file);
               dispatch({ type: "set-field-asset", asset });
             }}
           />
@@ -376,7 +395,7 @@ export function App() {
           dispatch={dispatch}
           sources={{ field: assetUrls.field, border: assetUrls.border, corner: assetUrls.corner }}
           onUpload={async (role, file) => {
-            const asset = await saveAsset(project.id, file);
+            const asset = await replaceAsset(project.roles[role].asset, file);
             dispatch({ type: "set-role-asset", role, asset });
           }}
         />
@@ -392,7 +411,7 @@ export function App() {
         dispatch={dispatch}
         sources={{ primary: assetUrls.primary, infill: assetUrls.infill }}
         onUpload={async (shape, file) => {
-          const asset = await saveAsset(project.id, file);
+          const asset = await replaceAsset(project.shapes[shape].asset, file);
           dispatch({ type: "set-shape-asset", shape, asset });
         }}
       />

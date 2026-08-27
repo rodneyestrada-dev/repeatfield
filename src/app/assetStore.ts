@@ -5,6 +5,10 @@ const STORE = "assets";
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") {
+      reject(new Error("IndexedDB unavailable"));
+      return;
+    }
     const request = indexedDB.open(DB_NAME, 1);
     request.onupgradeneeded = () => request.result.createObjectStore(STORE);
     request.onsuccess = () => resolve(request.result);
@@ -37,6 +41,30 @@ export async function loadAsset(projectId: string, ref: BrowserAssetRef): Promis
   });
   db.close();
   return value ?? null;
+}
+
+export async function deleteAsset(projectId: string, ref: BrowserAssetRef): Promise<void> {
+  if (ref.kind !== "indexeddb") return;
+  const db = await openDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).delete(key(projectId, ref.id));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+
+export async function deleteProjectAssets(projectId: string): Promise<void> {
+  const db = await openDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    const range = IDBKeyRange.bound(`${projectId}:`, `${projectId}:\uffff`);
+    tx.objectStore(STORE).delete(range);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
 }
 
 export async function clearAssetDatabase() {
