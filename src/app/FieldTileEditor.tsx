@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { Action, FieldTileProject } from "./state";
-import { renderFieldComposition, rectifiedTile } from "../engine/renderer";
-import { METATILE_PRESETS } from "../engine/metatilePresets";
+import { renderFieldComposition, rectifiedTile, applyCellTransform } from "../engine/renderer";
+import { METATILE_PRESET_GROUPS, generateRandomMetatile } from "../engine/metatilePresets";
 import { Range, downloadCanvas } from "./common";
 import { CropWorkspace } from "./CropWorkspace";
 import { exportFilename, validateExport } from "../engine/export";
@@ -57,7 +57,7 @@ function TileTurn({
   useEffect(() => {
     if (!img) return;
     const tile = rectifiedTile(img, project.crop, 128);
-    cells.forEach((turn, index) => {
+    cells.forEach((cell, index) => {
       const c = cellRefs.current[index];
       if (!c) return;
       c.width = 96;
@@ -66,7 +66,7 @@ function TileTurn({
       x.clearRect(0, 0, 96, 96);
       x.save();
       x.translate(48, 48);
-      x.rotate((turn * Math.PI) / 2);
+      applyCellTransform(x, cell);
       x.drawImage(tile, -48, -48, 96, 96);
       x.restore();
     });
@@ -80,29 +80,49 @@ function TileTurn({
         Shift-click rotates backward.
       </p>
       <div className="metatile-grid" aria-label="2 × 2 Repeat Block">
-        {cells.map((turn, index) => (
-          <button
-            key={index}
-            className="metatile-cell"
-            aria-label={`${names[index]} tile — ${turn * 90}°`}
-            title={`${names[index]} · ${turn * 90}° — click to rotate`}
-            onClick={(e) =>
-              dispatch({
-                type: "rotate-metatile-cell",
-                index,
-                delta: e.shiftKey ? -1 : 1,
-              })
-            }
-          >
-            <canvas
-              ref={(el) => {
-                cellRefs.current[index] = el;
-              }}
-              aria-hidden="true"
-            />
-            <span className="cell-angle">{turn * 90}°</span>
-          </button>
-        ))}
+        {cells.map((cell, index) => {
+          const stateLabel = `${names[index]} tile — ${cell.rotation * 90}° — ${cell.flipX ? "reflected" : "not reflected"} horizontally — ${cell.flipY ? "reflected" : "not reflected"} vertically`;
+          return (
+            <div className="metatile-cell-wrap" key={index}>
+              <button
+                className="metatile-cell"
+                aria-label={stateLabel}
+                title={`${names[index]} · ${cell.rotation * 90}° — click to rotate`}
+                onClick={(event) => dispatch({
+                  type: "rotate-metatile-cell",
+                  index,
+                  delta: event.shiftKey ? -1 : 1,
+                })}
+              >
+                <canvas
+                  ref={(element) => {
+                    cellRefs.current[index] = element;
+                  }}
+                  aria-hidden="true"
+                />
+                <span className="cell-angle">
+                  {cell.rotation * 90}°{cell.flipX ? " H" : ""}{cell.flipY ? " V" : ""}
+                </span>
+              </button>
+              <div className="cell-transform-actions" role="group" aria-label={`${names[index]} reflections`}>
+                <button
+                  aria-label={`Reflect ${names[index]} horizontally`}
+                  aria-pressed={cell.flipX}
+                  onClick={() => dispatch({ type: "reflect-metatile-cell", index, axis: "x" })}
+                >H</button>
+                <button
+                  aria-label={`Reflect ${names[index]} vertically`}
+                  aria-pressed={cell.flipY}
+                  onClick={() => dispatch({ type: "reflect-metatile-cell", index, axis: "y" })}
+                >V</button>
+                <button
+                  aria-label={`Reset ${names[index]} transform`}
+                  onClick={() => dispatch({ type: "reset-metatile-cell", index })}
+                >↺</button>
+              </div>
+            </div>
+          );
+        })}
       </div>
       <div className="block-actions">
         <button
@@ -121,36 +141,34 @@ function TileTurn({
         </button>
         <button
           aria-label="Reset all cells"
-          onClick={() =>
-            dispatch({ type: "apply-metatile-preset", cells: [0, 0, 0, 0] })
-          }
+          onClick={() => dispatch({
+            type: "apply-metatile-preset",
+            cells: METATILE_PRESET_GROUPS[0].presets[0].cells!,
+          })}
         >
           Reset
         </button>
-        <button
-          aria-label="Randomize cells"
-          onClick={() =>
-            dispatch({
-              type: "apply-metatile-preset",
-              cells: [0, 1, 2, 3].map(
-                () => Math.floor(Math.random() * 4) as 0 | 1 | 2 | 3,
-              ) as unknown as readonly [0 | 1 | 2 | 3, 0 | 1 | 2 | 3, 0 | 1 | 2 | 3, 0 | 1 | 2 | 3],
-            })
-          }
-        >
-          Random
-        </button>
       </div>
-      <div className="metatile-presets" aria-label="Orientation presets">
-        {METATILE_PRESETS.map((preset) => (
-          <button
-            key={preset.id}
-            onClick={() =>
-              dispatch({ type: "apply-metatile-preset", cells: preset.cells })
-            }
-          >
-            {preset.name}
-          </button>
+      <div className="metatile-preset-groups" aria-label="Orientation presets">
+        {METATILE_PRESET_GROUPS.map((group) => (
+          <section key={group.id} className="metatile-preset-group" aria-label={`${group.name} presets`}>
+            <h4>{group.name}</h4>
+            <div className="metatile-presets">
+              {group.presets.map((preset) => (
+                <button
+                  key={preset.id}
+                  onClick={() => dispatch({
+                    type: "apply-metatile-preset",
+                    cells: preset.generate
+                      ? generateRandomMetatile(preset.generate)
+                      : preset.cells!,
+                  })}
+                >
+                  {preset.name}
+                </button>
+              ))}
+            </div>
+          </section>
         ))}
       </div>
     </section>

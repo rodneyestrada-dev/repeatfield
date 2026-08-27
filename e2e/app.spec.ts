@@ -219,6 +219,29 @@ test("field tile full flow: crop, tile turn, layout, preview, export", async ({
   );
 });
 
+test("per-cell reflection changes preview and exported pixels through the shared renderer", async ({ page }) => {
+  await freshStart(page);
+  await page.getByRole("button", { name: /Field Tile/ }).click();
+  await page.getByRole("tab", { name: "Repeat" }).click();
+  const before = await page.getByTestId("pattern-canvas").evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL());
+  await page.getByRole("button", { name: "Reflect Top left horizontally" }).click();
+  await expect(page.getByRole("button", { name: /Top left tile — 0° — reflected horizontally/ })).toBeVisible();
+  const after = await page.getByTestId("pattern-canvas").evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL());
+  expect(after).not.toBe(before);
+
+  await page.getByRole("tab", { name: "Preview" }).click();
+  await page.getByLabel("Export width").fill("320");
+  await page.getByLabel("Export height").fill("320");
+  const reflectedExport = await downloadBytes(page, /Download PNG/);
+  await page.getByRole("button", { name: "Back to edit" }).click();
+  await page.getByRole("button", { name: "Reflect Top left horizontally" }).click();
+  await page.getByRole("tab", { name: "Preview" }).click();
+  await page.getByLabel("Export width").fill("320");
+  await page.getByLabel("Export height").fill("320");
+  const alignedExport = await downloadBytes(page, /Download PNG/);
+  expect(reflectedExport.equals(alignedExport)).toBe(false);
+});
+
 test("crop tools: unnumbered dock, persistent continue, whole-selection drag, keyboard nudge, live warp", async ({
   page,
 }) => {

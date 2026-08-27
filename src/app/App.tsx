@@ -17,12 +17,62 @@ import { FieldTileEditor } from "./FieldTileEditor";
 import { TileSetEditor } from "./TileSetEditor";
 import { TessellateEditor } from "./TessellateEditor";
 
-export function demoImageUrl(base: string) {
+export function repeatfieldAssetUrl(base: string, filename: string) {
   const normalized = base.endsWith("/") ? base : `${base}/`;
-  return `${normalized}source-tile.jpg`;
+  return `${normalized}${filename}`;
+}
+
+export function demoImageUrl(base: string) {
+  return repeatfieldAssetUrl(base, "source-tile.jpg");
 }
 
 const DEMO = demoImageUrl(import.meta.env.BASE_URL);
+const LOGO = repeatfieldAssetUrl(import.meta.env.BASE_URL, "repeatfield-tile-logo.svg");
+
+export function chooseHeroTurnTargets(random: () => number = Math.random): readonly number[] {
+  const pair = Math.max(0, Math.min(0.999999, random())) >= 0.5;
+  const selection = Math.max(0, Math.min(0.999999, random()));
+  if (!pair) return [Math.floor(selection * 4)];
+  return selection < 0.5 ? [0, 3] : [1, 2];
+}
+
+function HeroTiles() {
+  const [turns, setTurns] = useState([0, 1, 3, 2]);
+  const [paused, setPaused] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(
+    () => globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
+  );
+  useEffect(() => {
+    const query = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (!query) return;
+    const update = () => setReducedMotion(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  useEffect(() => {
+    if (paused || reducedMotion) return;
+    const timer = globalThis.setInterval(() => {
+      const targets = chooseHeroTurnTargets();
+      setTurns((current) => current.map((turn, index) =>
+        targets.includes(index) ? (turn + 1) % 4 : turn,
+      ));
+    }, 3200);
+    return () => globalThis.clearInterval(timer);
+  }, [paused, reducedMotion]);
+  const motionPaused = paused || reducedMotion;
+  return (
+    <div className="hero-tiles-wrap" data-paused={motionPaused}>
+      <div className="hero-tiles" aria-hidden="true">
+        {turns.map((turn, index) => (
+          <img key={index} src={LOGO} alt="" style={{ transform: `rotate(${turn * 90}deg)` }} />
+        ))}
+      </div>
+      <button className="hero-pause" aria-pressed={paused} onClick={() => setPaused((value) => !value)}>
+        {paused ? "Play tile motion" : "Pause tile motion"}
+      </button>
+    </div>
+  );
+}
 
 type AssetUrls = Record<string, string | null>;
 
@@ -77,7 +127,7 @@ function useProjectAssetUrls(project: PatternProject | null) {
 function WorkflowDiagram({ kind }: { kind: WorkflowKind }) {
   if (kind === "field-tile")
     return (
-      <svg viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
+      <svg data-testid="workflow-diagram-field-tile" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
         {[0, 1, 2].map((row) =>
           [0, 1, 2].map((column) => (
             <rect
@@ -86,9 +136,8 @@ function WorkflowDiagram({ kind }: { kind: WorkflowKind }) {
               y={4 + row * 19}
               width="17"
               height="17"
-              rx="2"
-              fill="rgba(112,73,215,.28)"
-              stroke="rgba(112,73,215,.7)"
+              rx="4"
+              fill="#FFD4A8"
             />
           )),
         )}
@@ -96,12 +145,15 @@ function WorkflowDiagram({ kind }: { kind: WorkflowKind }) {
     );
   if (kind === "tile-set")
     return (
-      <svg viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
+      <svg data-testid="workflow-diagram-tile-set" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
         {[0, 1, 2].map((row) =>
           [0, 1, 2].map((column) => {
-            const isCorner =
-              (row === 0 || row === 2) && (column === 0 || column === 2);
-            const isEdge = !isCorner && (row === 0 || row === 2 || column === 0 || column === 2);
+            const index = row * 3 + column;
+            const fills = [
+              "#FFC7A1", "#FFC7A1", "#FF8C17",
+              "#FFD4A8", "#FFD4A8", "#FFC7A1",
+              "#FFD4A8", "#FFD4A8", "#FFC7A1",
+            ];
             return (
               <rect
                 key={`${row}-${column}`}
@@ -109,15 +161,8 @@ function WorkflowDiagram({ kind }: { kind: WorkflowKind }) {
                 y={4 + row * 19}
                 width="17"
                 height="17"
-                rx="2"
-                fill={
-                  isCorner
-                    ? "rgba(64,42,120,.6)"
-                    : isEdge
-                      ? "rgba(112,73,215,.42)"
-                      : "rgba(112,73,215,.18)"
-                }
-                stroke="rgba(112,73,215,.7)"
+                rx="4"
+                fill={fills[index]}
               />
             );
           }),
@@ -125,15 +170,10 @@ function WorkflowDiagram({ kind }: { kind: WorkflowKind }) {
       </svg>
     );
   return (
-    <svg viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
+    <svg data-testid="workflow-diagram-tessellate" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
       <path
-        d="M12 22 Q20 6 32 16 Q44 6 52 22 Q62 32 52 42 Q44 58 32 48 Q20 58 12 42 Q2 32 12 22 Z"
-        fill="rgba(112,73,215,.28)"
-        stroke="rgba(112,73,215,.7)"
-      />
-      <path
-        d="M26 28 L38 28 L32 40 Z"
-        fill="rgba(64,42,120,.55)"
+        d="M8 25 C8 13 18 7 29 15 C40 7 54 13 54 26 C54 36 46 42 38 41 L32 56 L26 41 C16 44 8 36 8 25 Z"
+        fill="#FF8C17"
       />
     </svg>
   );
@@ -147,12 +187,13 @@ function EntryScreen({
   return (
     <main className="entry-screen">
       <div className="brand entry-brand">
-        <span className="brand-mark">◒</span>
+        <img className="brand-mark" src={LOGO} alt="Repeatfield" />
         <span>
           <b>Repeatfield</b>
           <small>Patterns from your own tiles.</small>
         </span>
       </div>
+      <HeroTiles />
       <h1>What are you making?</h1>
       <div className="workflow-choices">
         <button
@@ -278,7 +319,7 @@ export function App() {
   const header = (
     <header className="topbar" role="banner">
       <div className="brand">
-        <span className="brand-mark">◒</span>
+        <img className="brand-mark" src={LOGO} alt="Repeatfield" />
         <span>
           <b>Repeatfield</b>
           <small data-testid="workflow-name">

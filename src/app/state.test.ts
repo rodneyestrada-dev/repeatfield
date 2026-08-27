@@ -14,6 +14,10 @@ import {
   type TileSetProject,
 } from "./state";
 import { validateExport, exportFilename } from "../engine/export";
+import { normalizeMetatile } from "../engine/metatile";
+
+const transforms = (...rotations: number[]) =>
+  normalizeMetatile({ cells: rotations }).cells;
 
 const fieldTile = (): AppState =>
   appReducer(INITIAL_STATE, { type: "create-project", workflow: "field-tile" });
@@ -62,6 +66,26 @@ test("projects round-trip through persistence with the workflow discriminator", 
   expect(deserializeProject(null)).toBeNull();
   expect(deserializeProject("not json")).toBeNull();
   expect(deserializeProject('{"project":{"workflow":"bogus"}}')).toBeNull();
+});
+
+test("legacy scalar metatile snapshots hydrate to explicit transforms", () => {
+  const legacy = createProject("field-tile") as FieldTileProject;
+  (legacy.composition.metatile as unknown as { cells: number[] }).cells = [0, 1, 2, 3];
+  const restored = deserializeProject(JSON.stringify({ version: 3, project: legacy })) as FieldTileProject;
+  expect(restored.composition.metatile.cells).toEqual([
+    { rotation: 0, flipX: false, flipY: false },
+    { rotation: 1, flipX: false, flipY: false },
+    { rotation: 2, flipX: false, flipY: false },
+    { rotation: 3, flipX: false, flipY: false },
+  ]);
+});
+
+test("field hydration tolerates malformed legacy history arrays without discarding the project", () => {
+  const legacy = createProject("field-tile") as FieldTileProject;
+  (legacy as unknown as { history: unknown }).history = { past: null, future: "broken" };
+  const restored = deserializeProject(JSON.stringify({ version: 3, project: legacy })) as FieldTileProject;
+  expect(restored).not.toBeNull();
+  expect(restored.history).toEqual({ past: [], future: [] });
 });
 
 test("fresh projects are untouched while geometry and asset edits are meaningful", () => {
@@ -195,11 +219,30 @@ test("rotate and flip update source orientation", () => {
 // Field Tile: Tile Turn + Field Layout + history
 // ---------------------------------------------------------------------------
 
+test("reflecting one metatile cell is undoable and preserves its rotation", () => {
+  let s = fieldTile();
+  s = appReducer(s, { type: "rotate-metatile-cell", index: 2, delta: 1 });
+  s = appReducer(s, { type: "reflect-metatile-cell", index: 2, axis: "x" });
+  expect((s.project as FieldTileProject).composition.metatile.cells[2]).toEqual({
+    rotation: 1,
+    flipX: true,
+    flipY: false,
+  });
+  s = appReducer(s, { type: "undo" });
+  expect((s.project as FieldTileProject).composition.metatile.cells[2]).toEqual({
+    rotation: 1,
+    flipX: false,
+    flipY: false,
+  });
+  s = appReducer(s, { type: "redo" });
+  expect((s.project as FieldTileProject).composition.metatile.cells[2].flipX).toBe(true);
+});
+
 test("rotating one metatile cell leaves the other cells untouched", () => {
   let s = fieldTile();
   s = appReducer(s, { type: "rotate-metatile-cell", index: 1, delta: 1 });
   const cells = (s.project as FieldTileProject).composition.metatile.cells;
-  expect(cells).toEqual([0, 1, 0, 0]);
+  expect(cells).toEqual(transforms(0, 1, 0, 0));
 });
 
 test("changing layout never mutates cell orientations", () => {
@@ -208,7 +251,7 @@ test("changing layout never mutates cell orientations", () => {
   s = appReducer(s, { type: "field-comp", key: "layout", value: "brick" });
   const composition = (s.project as FieldTileProject).composition;
   expect(composition.layout).toBe("brick");
-  expect(composition.metatile.cells).toEqual([1, 0, 0, 0]);
+  expect(composition.metatile.cells).toEqual(transforms(1, 0, 0, 0));
 });
 
 test("field tile undo and redo cover orientation, layout, and symmetry in order", () => {
@@ -227,11 +270,11 @@ test("field tile undo and redo cover orientation, layout, and symmetry in order"
   s = appReducer(s, { type: "undo" });
   expect(
     (s.project as FieldTileProject).composition.metatile.cells,
-  ).toEqual([0, 0, 0, 0]);
+  ).toEqual(transforms(0, 0, 0, 0));
   s = appReducer(s, { type: "redo" });
   expect(
     (s.project as FieldTileProject).composition.metatile.cells,
-  ).toEqual([1, 0, 0, 0]);
+  ).toEqual(transforms(1, 0, 0, 0));
   // a new change after undo clears redo
   s = appReducer(s, { type: "field-comp", key: "gap", value: 12 });
   expect((s.project as FieldTileProject).history.future).toHaveLength(0);
@@ -241,12 +284,12 @@ test("presets populate editable state rather than locking cells", () => {
   let s = fieldTile();
   s = appReducer(s, {
     type: "apply-metatile-preset",
-    cells: [0, 1, 3, 2],
+    cells: transforms(0, 1, 3, 2),
   });
   s = appReducer(s, { type: "rotate-metatile-cell", index: 3, delta: 1 });
   expect(
     (s.project as FieldTileProject).composition.metatile.cells,
-  ).toEqual([0, 1, 3, 3]);
+  ).toEqual(transforms(0, 1, 3, 3));
 });
 
 test("field composition clamps zoom and scale", () => {

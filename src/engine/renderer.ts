@@ -1,7 +1,7 @@
 import type { Quad } from "./geometry";
 import { mapUnitSquareToQuad } from "./geometry";
 import { applyAlphaMask, hexToRgb } from "./background";
-import type { MetatileState } from "./metatile";
+import type { CellTransform, MetatileState } from "./metatile";
 import { computeFrameLayout, edgePhaseFraction, type TileRole } from "./frameLayout";
 import { applyLook, isDefaultLook, type SetLook } from "./appearance";
 import type {
@@ -170,6 +170,14 @@ export function rectifiedTile(
 // Tile Turn: render the 2×2 Repeat Block (metatile)
 // ---------------------------------------------------------------------------
 
+export function applyCellTransform(
+  ctx: Pick<CanvasRenderingContext2D, "rotate" | "scale">,
+  cell: CellTransform,
+) {
+  ctx.rotate((cell.rotation * Math.PI) / 2);
+  ctx.scale(cell.flipX ? -1 : 1, cell.flipY ? -1 : 1);
+}
+
 export function renderMetatile(
   sourceTile: SizedSource,
   metatile: MetatileState,
@@ -177,7 +185,7 @@ export function renderMetatile(
 ): HTMLCanvasElement {
   const result = canvas(cellSize * 2, cellSize * 2);
   const ctx = result.getContext("2d")!;
-  metatile.cells.forEach((turn, index) => {
+  metatile.cells.forEach((cell, index) => {
     const column = index % 2;
     const row = Math.floor(index / 2);
     ctx.save();
@@ -185,7 +193,7 @@ export function renderMetatile(
       column * cellSize + cellSize / 2,
       row * cellSize + cellSize / 2,
     );
-    ctx.rotate((turn * Math.PI) / 2);
+    applyCellTransform(ctx, cell);
     ctx.drawImage(sourceTile, -cellSize / 2, -cellSize / 2, cellSize, cellSize);
     ctx.restore();
   });
