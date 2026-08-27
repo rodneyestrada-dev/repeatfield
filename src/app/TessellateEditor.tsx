@@ -6,6 +6,7 @@ import {
   renderTessellation,
   tessellationCoverage,
 } from "../engine/renderer";
+import { extractContours } from "../engine/contours";
 import { coverageStatus } from "../engine/coverage";
 import { applyAlphaMask, hexToRgb, rgbToHex } from "../engine/background";
 import { Range, downloadCanvas, useImage, acceptUpload } from "./common";
@@ -134,7 +135,53 @@ function ShapesStage({
         Math.min(r.width / canvas.width, r.height / canvas.height) * 0.85;
       const w = canvas.width * fit;
       const h = canvas.height * fit;
-      x.drawImage(canvas, (r.width - w) / 2, (r.height - h) / 2, w, h);
+      const ox = (r.width - w) / 2;
+      const oy = (r.height - h) / 2;
+      x.drawImage(canvas, ox, oy, w, h);
+      // extracted contour overlay: outer boundary + holes, downsampled mask
+      try {
+        const scale = Math.min(1, 160 / Math.max(canvas.width, canvas.height));
+        const mw = Math.max(2, Math.round(canvas.width * scale));
+        const mh = Math.max(2, Math.round(canvas.height * scale));
+        const probe = document.createElement("canvas");
+        probe.width = mw;
+        probe.height = mh;
+        const pctx = probe.getContext("2d", { willReadFrequently: true });
+        if (pctx) {
+          pctx.drawImage(canvas, 0, 0, mw, mh);
+          const pixels = pctx.getImageData(0, 0, mw, mh).data;
+          const mask = new Uint8Array(mw * mh);
+          const threshold = slot.alphaThreshold;
+          for (let index = 0; index < mask.length; index++)
+            mask[index] = pixels[index * 4 + 3] >= threshold ? 1 : 0;
+          const { outer, holes } = extractContours(mask, mw, mh, {
+            minArea: 4,
+          });
+          const drawContour = (
+            contour: { x: number; y: number }[],
+            color: string,
+          ) => {
+            x.save();
+            x.strokeStyle = color;
+            x.lineWidth = 1.6;
+            x.beginPath();
+            contour.forEach((point, index) => {
+              const sx = ox + (point.x / mw) * w;
+              const sy = oy + (point.y / mh) * h;
+              if (index === 0) x.moveTo(sx, sy);
+              else x.lineTo(sx, sy);
+            });
+            x.closePath();
+            x.stroke();
+            x.restore();
+          };
+          if (outer) drawContour(outer, "rgba(0, 176, 200, 0.95)");
+          for (const hole of holes)
+            drawContour(hole, "rgba(200, 100, 0, 0.85)");
+        }
+      } catch {
+        // contour overlay is best-effort; the shape itself is still shown
+      }
     };
     paint();
     const ro = new ResizeObserver(paint);
@@ -306,6 +353,28 @@ function ShapesStage({
                 >
                   Reset background removal
                 </button>
+                <div className="contour-tools">
+                  <span className="eyebrow">CONTOUR</span>
+                  <Range
+                    label="Alpha threshold"
+                    value={slot.alphaThreshold}
+                    min={1}
+                    max={254}
+                    onChange={(value) =>
+                      dispatch({
+                        type: "shape-setting",
+                        shape: activeShape,
+                        key: "alphaThreshold",
+                        value,
+                      })
+                    }
+                  />
+                  <p className="tool-note">
+                    The cyan outline is the extracted outer contour; orange
+                    outlines are interior holes. Holes are kept — they may be
+                    intentional artwork.
+                  </p>
+                </div>
               </aside>
             </div>
             <div className="crop-action-bar">
