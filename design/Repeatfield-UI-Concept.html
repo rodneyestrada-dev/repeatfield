@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Repeatfield — UI Concept</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0e0f0c; --panel:#151612; --surface:#1a1b17; --surface-2:#20211c;
+  --line:rgba(255,255,255,.105); --line-soft:rgba(255,255,255,.065);
+  --text:#f3f1e9; --muted:rgba(243,241,233,.52); --faint:rgba(243,241,233,.31);
+  --lime:#d9ff57; --danger:#ff715e; --radius:9px;
+}
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--text)}
+body{font-family:"Instrument Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+.app{width:1440px;height:1024px;background:var(--bg);position:relative;overflow:hidden}
+.app:after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.055;mix-blend-mode:screen;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E")}
+.topbar{height:72px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:230px 1fr 300px;position:relative;z-index:4;background:#11120f}
+.brand{display:flex;align-items:center;gap:12px;padding:0 18px;border-right:1px solid var(--line)}
+.mark{width:33px;height:33px;border:1px solid rgba(255,255,255,.7);position:relative;overflow:hidden;background:#ededdf}
+.mark i{position:absolute;width:17px;height:17px;background:#11120f;transform-origin:100% 100%}
+.mark i:nth-child(1){left:0;top:0;border-radius:0 0 100% 0}.mark i:nth-child(2){right:0;bottom:0;border-radius:100% 0 0 0}
+.brand-name{font-family:"Bricolage Grotesque",sans-serif;font-size:19px;letter-spacing:-.5px;line-height:1;font-weight:600}
+.brand-sub{font:9px/1.2 "IBM Plex Mono",monospace;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-top:5px}
+.toolbar{display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-right:1px solid var(--line)}
+.tool-left,.tool-right{display:flex;align-items:center;gap:8px}
+.file-pill{display:flex;align-items:center;gap:10px;height:36px;padding:0 12px 0 7px;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.025)}
+.file-thumb{width:23px;height:23px;object-fit:cover;border-radius:3px;border:1px solid rgba(255,255,255,.14)}
+.file-name{font-size:12px;color:rgba(243,241,233,.84)}
+.file-meta{font:9px "IBM Plex Mono";color:var(--faint);margin-left:3px}
+.ghost{height:34px;border:1px solid var(--line-soft);background:transparent;border-radius:7px;padding:0 11px;color:var(--muted);font-size:11px;display:flex;align-items:center;gap:7px}
+.ghost .mini-icon{font:13px "IBM Plex Mono";color:rgba(255,255,255,.64)}
+.zoom-readout{font:10px "IBM Plex Mono";color:var(--muted);min-width:42px;text-align:center}
+.export-area{display:flex;align-items:center;justify-content:flex-end;padding:0 18px;gap:10px}
+.save-state{display:flex;align-items:center;gap:7px;font:9px "IBM Plex Mono";text-transform:uppercase;letter-spacing:.08em;color:var(--faint)}
+.save-state:before{content:"";width:6px;height:6px;border-radius:50%;background:#7c864d;box-shadow:0 0 0 3px rgba(124,134,77,.12)}
+.export{height:38px;border:0;border-radius:7px;padding:0 15px;background:var(--lime);color:#11120f;font-size:12px;font-weight:600;display:flex;align-items:center;gap:12px;box-shadow:0 0 0 1px rgba(217,255,87,.25) inset}
+.export span:last-child{font:12px "IBM Plex Mono"}
+.workspace{height:952px;display:grid;grid-template-columns:230px 1fr 300px;position:relative;z-index:2}
+.sidebar{border-right:1px solid var(--line);background:var(--panel);padding:19px 16px 16px;display:flex;flex-direction:column;overflow:hidden}
+.overline{font:9px "IBM Plex Mono";letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+.side-heading{font-family:"Bricolage Grotesque";font-size:26px;line-height:1.04;letter-spacing:-.8px;font-weight:500;margin:9px 0 6px}
+.side-copy{font-size:11px;line-height:1.45;color:var(--muted);max-width:185px;margin:0 0 17px}
+.preset-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.preset{position:relative;border:1px solid var(--line-soft);border-radius:7px;padding:5px 5px 8px;background:rgba(255,255,255,.015);height:119px;overflow:hidden}
+.preset.active{border-color:var(--lime);box-shadow:0 0 0 1px rgba(217,255,87,.16) inset}
+.preset canvas{display:block;width:100%;height:78px;border-radius:3px;background:#26271f}
+.preset-label{font-size:10px;margin-top:7px;color:rgba(243,241,233,.76);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.preset-code{position:absolute;right:6px;bottom:8px;font:8px "IBM Plex Mono";color:var(--faint)}
+.active-dot{position:absolute;right:6px;top:6px;width:7px;height:7px;border-radius:50%;background:var(--lime);box-shadow:0 0 0 3px rgba(20,21,17,.68)}
+.more-presets{height:34px;margin-top:9px;border:1px solid var(--line-soft);border-radius:7px;background:transparent;color:var(--muted);font-size:10px;text-align:left;padding:0 11px;display:flex;align-items:center;justify-content:space-between}
+.source-block{margin-top:auto;border-top:1px solid var(--line);padding-top:14px}
+.source-row{display:flex;gap:11px;align-items:center;margin-top:10px}
+.source-preview{width:54px;height:54px;object-fit:cover;border-radius:5px;border:1px solid var(--line)}
+.source-title{font-size:11px;margin-bottom:5px}.source-size{font:8px "IBM Plex Mono";color:var(--faint)}
+.replace{font-size:9px;color:var(--lime);margin-top:9px}
+.center{background:#10110e;padding:16px 16px 14px;display:grid;grid-template-rows:minmax(0,1fr) 111px;gap:12px;min-width:0}
+.stage{border:1px solid var(--line);border-radius:10px;position:relative;overflow:hidden;background:#191a16;box-shadow:0 20px 60px rgba(0,0,0,.22)}
+#mainPattern{width:100%;height:100%;display:block}
+.stage-top{position:absolute;left:16px;right:16px;top:14px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+.stage-title{background:rgba(14,15,12,.80);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(9px);border-radius:7px;padding:9px 11px;box-shadow:0 5px 20px rgba(0,0,0,.16)}
+.stage-title strong{display:block;font-family:"Bricolage Grotesque";font-size:14px;letter-spacing:-.2px;font-weight:500}.stage-title span{display:block;font:8px "IBM Plex Mono";color:rgba(255,255,255,.48);margin-top:4px;text-transform:uppercase;letter-spacing:.08em}
+.stage-badge{display:flex;align-items:center;gap:8px;background:rgba(14,15,12,.80);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(9px);border-radius:7px;padding:8px 10px;font:8px "IBM Plex Mono";text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.62)}
+.stage-badge:before{content:"";width:6px;height:6px;border-radius:50%;background:var(--lime)}
+.stage-bottom{position:absolute;left:14px;right:14px;bottom:13px;display:flex;justify-content:space-between;align-items:end;pointer-events:none}
+.hint{background:rgba(14,15,12,.72);border:1px solid rgba(255,255,255,.11);border-radius:6px;padding:7px 9px;font:8px "IBM Plex Mono";color:rgba(255,255,255,.55);letter-spacing:.04em}
+.navigator{width:122px;height:79px;background:rgba(14,15,12,.79);border:1px solid rgba(255,255,255,.16);border-radius:7px;padding:6px;backdrop-filter:blur(8px)}
+#navPattern{width:100%;height:100%;display:block;border-radius:3px}.nav-window{position:absolute;width:42px;height:31px;border:1px solid var(--lime);right:24px;bottom:27px;box-shadow:0 0 0 1px rgba(17,18,15,.7)}
+.variations{border:1px solid var(--line);border-radius:9px;background:var(--panel);padding:12px 13px;display:grid;grid-template-columns:125px 1fr;gap:12px;align-items:center;overflow:hidden}
+.variation-heading{font-family:"Bricolage Grotesque";font-size:15px;line-height:1.12;font-weight:500;letter-spacing:-.25px;margin-top:6px}.variation-sub{font:8px/1.45 "IBM Plex Mono";color:var(--faint);margin-top:7px;text-transform:uppercase;letter-spacing:.05em}
+.variation-list{height:84px;display:grid;grid-template-columns:repeat(5,1fr);gap:8px;min-width:0}
+.variation{border:1px solid var(--line-soft);border-radius:6px;padding:4px;background:rgba(255,255,255,.018);position:relative;overflow:hidden}.variation:first-child{border-color:rgba(217,255,87,.65)}
+.variation canvas{display:block;width:100%;height:100%;border-radius:3px}.variation-num{position:absolute;left:8px;bottom:7px;font:7px "IBM Plex Mono";color:white;background:rgba(15,16,13,.72);padding:3px 5px;border-radius:3px}
+.inspector{background:var(--panel);overflow:hidden}
+.inspector-head{height:68px;border-bottom:1px solid var(--line);padding:16px 17px 0;display:flex;justify-content:space-between;align-items:flex-start}
+.inspector-head h2{font-family:"Bricolage Grotesque";font-size:18px;line-height:1;margin:0;font-weight:500;letter-spacing:-.4px}
+.inspector-head p{margin:7px 0 0;font:8px "IBM Plex Mono";color:var(--faint);text-transform:uppercase;letter-spacing:.08em}
+.preset-badge{font:8px "IBM Plex Mono";border:1px solid var(--line);border-radius:5px;padding:5px 6px;color:var(--muted)}
+.section{padding:17px;border-bottom:1px solid var(--line)}
+.section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.section-title strong{font:9px "IBM Plex Mono";letter-spacing:.11em;text-transform:uppercase;color:rgba(243,241,233,.68)}.section-title span{font-size:13px;color:var(--faint)}
+.control{margin-bottom:15px}.control:last-child{margin-bottom:0}
+.control-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.control label{font-size:10px;color:var(--muted)}.value{font:9px "IBM Plex Mono";color:rgba(243,241,233,.78);background:rgba(255,255,255,.035);border:1px solid var(--line-soft);border-radius:4px;padding:3px 5px;min-width:42px;text-align:right}
+.track{height:3px;background:rgba(255,255,255,.09);border-radius:4px;position:relative}.track span{position:absolute;left:0;top:0;bottom:0;background:rgba(243,241,233,.52);border-radius:4px}.track i{position:absolute;top:50%;width:10px;height:10px;background:#eeece4;border:2px solid #24251f;border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 0 1px rgba(255,255,255,.23)}
+.segmented{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}.segmented button{height:29px;background:rgba(255,255,255,.025);border:1px solid var(--line-soft);border-radius:5px;font:9px "IBM Plex Mono";color:var(--muted)}.segmented button.on{color:#11120f;background:var(--lime);border-color:var(--lime)}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;margin-top:14px}.toggle-row span{font-size:10px;color:var(--muted)}.switch{width:29px;height:16px;border-radius:20px;background:var(--lime);padding:2px}.switch:after{content:"";display:block;width:12px;height:12px;border-radius:50%;background:#11120f;margin-left:13px}
+.color-row{display:flex;gap:8px}.swatch{width:28px;height:28px;border-radius:5px;border:1px solid var(--line)}.color-field{height:28px;flex:1;border:1px solid var(--line-soft);border-radius:5px;background:rgba(255,255,255,.02);display:flex;align-items:center;padding:0 8px;font:9px "IBM Plex Mono";color:var(--muted)}
+.footer-note{padding:15px 17px;color:var(--faint);font:8px/1.5 "IBM Plex Mono";text-transform:uppercase;letter-spacing:.05em}.privacy{display:flex;align-items:center;gap:8px;margin-top:8px;color:rgba(217,255,87,.62)}.privacy:before{content:"";width:6px;height:6px;border:1px solid currentColor;border-radius:50%}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><div class="mark"><i></i><i></i></div><div><div class="brand-name">Repeatfield</div><div class="brand-sub">A study by Rodney Estrada</div></div></div>
+    <div class="toolbar">
+      <div class="tool-left"><div class="file-pill"><img class="file-thumb" src="source-tile.jpg"><span class="file-name">tile-study-01.jpg</span><span class="file-meta">767×746</span></div><button class="ghost">Replace tile</button></div>
+      <div class="tool-right"><button class="ghost"><span class="mini-icon">⌗</span> Guides</button><button class="ghost"><span class="mini-icon">↺</span> Reset</button><span class="zoom-readout">67%</span><button class="ghost" style="padding:0;width:34px;justify-content:center">−</button><button class="ghost" style="padding:0;width:34px;justify-content:center">＋</button></div>
+    </div>
+    <div class="export-area"><div class="save-state">Local only</div><button class="export"><span>Export field</span><span>↗</span></button></div>
+  </header>
+
+  <main class="workspace">
+    <aside class="sidebar">
+      <div class="overline">Ways to repeat</div>
+      <div class="side-heading">Find the field<br>inside one tile.</div>
+      <p class="side-copy">Rotate, reflect and fold your image into new visual systems.</p>
+      <div class="preset-grid">
+        <div class="preset"><canvas data-mode="straight"></canvas><div class="preset-label">Straight</div><div class="preset-code">01</div></div>
+        <div class="preset active"><canvas data-mode="rosette"></canvas><span class="active-dot"></span><div class="preset-label">Quarter turn</div><div class="preset-code">02</div></div>
+        <div class="preset"><canvas data-mode="mirror"></canvas><div class="preset-label">Mirror grid</div><div class="preset-code">03</div></div>
+        <div class="preset"><canvas data-mode="checker"></canvas><div class="preset-label">Checker rotate</div><div class="preset-code">04</div></div>
+        <div class="preset"><canvas data-mode="diamond"></canvas><div class="preset-label">Diamond</div><div class="preset-code">05</div></div>
+        <div class="preset"><canvas data-mode="kaleido"></canvas><div class="preset-label">Kaleidoscope</div><div class="preset-code">06</div></div>
+      </div>
+      <button class="more-presets"><span>Explore all systems</span><span>12 ↗</span></button>
+      <div class="source-block"><div class="overline">Source tile</div><div class="source-row"><img class="source-preview" src="source-tile.jpg"><div><div class="source-title">Original image</div><div class="source-size">JPG · 82 KB<br>Square crop active</div><div class="replace">Edit crop ↗</div></div></div></div>
+    </aside>
+
+    <section class="center">
+      <div class="stage">
+        <canvas id="mainPattern"></canvas>
+        <div class="stage-top"><div class="stage-title"><strong>Quarter-turn rosette</strong><span>4-fold rotation · square cell</span></div><div class="stage-badge">Live field</div></div>
+        <div class="stage-bottom"><div class="hint">DRAG TO MOVE SOURCE · SCROLL TO ZOOM</div><div class="navigator"><canvas id="navPattern"></canvas></div><div class="nav-window"></div></div>
+      </div>
+      <div class="variations"><div><div class="overline">Nearby outcomes</div><div class="variation-heading">Same rule,<br>different edges.</div><div class="variation-sub">Seed variations</div></div><div class="variation-list"><div class="variation"><canvas data-variant="0"></canvas><span class="variation-num">A·01</span></div><div class="variation"><canvas data-variant="1"></canvas><span class="variation-num">A·02</span></div><div class="variation"><canvas data-variant="2"></canvas><span class="variation-num">A·03</span></div><div class="variation"><canvas data-variant="3"></canvas><span class="variation-num">A·04</span></div><div class="variation"><canvas data-variant="4"></canvas><span class="variation-num">A·05</span></div></div></div>
+    </section>
+
+    <aside class="inspector">
+      <div class="inspector-head"><div><h2>Shape the field</h2><p>Source + repeat controls</p></div><div class="preset-badge">02 / 12</div></div>
+      <section class="section"><div class="section-title"><strong>Source</strong><span>−</span></div>
+        <div class="control"><div class="control-row"><label>Zoom</label><span class="value">1.18×</span></div><div class="track"><span style="width:62%"></span><i style="left:62%"></i></div></div>
+        <div class="control"><div class="control-row"><label>Horizontal position</label><span class="value">+12</span></div><div class="track"><span style="width:57%"></span><i style="left:57%"></i></div></div>
+        <div class="control"><div class="control-row"><label>Vertical position</label><span class="value">−08</span></div><div class="track"><span style="width:46%"></span><i style="left:46%"></i></div></div>
+        <div class="control"><div class="control-row"><label>Source rotation</label><span class="value">0°</span></div><div class="track"><span style="width:50%"></span><i style="left:50%"></i></div></div>
+      </section>
+      <section class="section"><div class="section-title"><strong>Field</strong><span>−</span></div>
+        <div class="control"><div class="control-row"><label>Tile scale</label><span class="value">168 px</span></div><div class="track"><span style="width:54%"></span><i style="left:54%"></i></div></div>
+        <div class="control"><div class="control-row"><label>Gap</label><span class="value">0 px</span></div><div class="track"><span style="width:5%"></span><i style="left:5%"></i></div></div>
+        <div class="control"><div class="control-row"><label>Field rotation</label><span class="value">0°</span></div><div class="track"><span style="width:50%"></span><i style="left:50%"></i></div></div>
+        <div class="toggle-row"><span>Show cell boundaries</span><div class="switch"></div></div>
+      </section>
+      <section class="section"><div class="section-title"><strong>Symmetry</strong><span>−</span></div>
+        <div class="control-row" style="margin-bottom:9px"><label style="font-size:10px;color:var(--muted)">Rotations</label><span class="value">4</span></div>
+        <div class="segmented"><button>3</button><button class="on">4</button><button>6</button><button>8</button><button>12</button></div>
+        <div class="toggle-row"><span>Alternate reflection</span><div class="switch"></div></div>
+      </section>
+      <section class="section"><div class="section-title"><strong>Canvas</strong><span>−</span></div><div class="control-row"><label style="font-size:10px;color:var(--muted)">Background</label></div><div class="color-row"><div class="swatch" style="background:#4b5b12"></div><div class="color-field">#4B5B12</div></div></section>
+      <div class="footer-note">Your image and every variation stay on this device.<div class="privacy">No upload · no account</div></div>
+    </aside>
+  </main>
+</div>
+<script>
+const img = new Image();
+img.src = 'source-tile.jpg';
+const crop = {x:107,y:90,w:579,h:579};
+function sizeCanvas(c){const r=c.getBoundingClientRect();const d=2;c.width=Math.max(2,Math.round(r.width*d));c.height=Math.max(2,Math.round(r.height*d));const x=c.getContext('2d');x.setTransform(d,0,0,d,0,0);return {ctx:x,w:r.width,h:r.height}}
+function drawCell(ctx,x,y,s,rot=0,fx=1,fy=1,zoom=1,ox=0,oy=0){ctx.save();ctx.translate(x+s/2,y+s/2);ctx.rotate(rot*Math.PI/180);ctx.scale(fx,fy);ctx.beginPath();ctx.rect(-s/2,-s/2,s,s);ctx.clip();const z=s*zoom;ctx.drawImage(img,crop.x,crop.y,crop.w,crop.h,-z/2+ox,-z/2+oy,z,z);ctx.restore()}
+function drawKaleido(ctx,cx,cy,r,segments=8,phase=0){const a=Math.PI*2/segments;for(let i=0;i<segments;i++){ctx.save();ctx.translate(cx,cy);ctx.rotate(i*a);ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(r,Math.tan(a/2)*r);ctx.lineTo(r,-Math.tan(a/2)*r);ctx.closePath();ctx.clip();if(i%2)ctx.scale(1,-1);ctx.rotate(phase);const z=r*2.05;ctx.drawImage(img,crop.x,crop.y,crop.w,crop.h,-z*.46,-z*.50,z,z);ctx.restore()}}
+function paint(canvas,mode='rosette',opt={}){const {ctx,w,h}=sizeCanvas(canvas);ctx.clearRect(0,0,w,h);ctx.fillStyle=opt.bg||'#4b5b12';ctx.fillRect(0,0,w,h);if(mode==='kaleido'){const r=opt.cell||72;for(let y=-r;y<h+r;y+=r*1.46){for(let x=-r;x<w+r;x+=r*1.46){drawKaleido(ctx,x+((Math.floor(y/(r*1.46))%2)*r*.73),y,r,8,opt.phase||0)}}return}
+ const s=opt.cell||126, zoom=opt.zoom||1.02, ox=opt.ox||0, oy=opt.oy||0;
+ for(let row=-2,y=(opt.shiftY||0)-s*2;y<h+s*2;row++,y+=s){for(let col=-2,x=(opt.shiftX||0)-s*2;x<w+s*2;col++,x+=s){let rot=0,fx=1,fy=1;
+  if(mode==='rosette'){const m=[[0,90],[270,180]];rot=m[((row%2)+2)%2][((col%2)+2)%2]}
+  if(mode==='checker')rot=((row+col)&1)?180:0;
+  if(mode==='mirror'){fx=(col&1)?-1:1;fy=(row&1)?-1:1}
+  if(mode==='diamond')rot=45;
+  drawCell(ctx,x,y,s,rot,fx,fy,zoom,ox,oy)
+ }}
+ if(opt.guides){ctx.save();ctx.strokeStyle='rgba(20,21,17,.38)';ctx.lineWidth=1;for(let x=0;x<w;x+=s){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke()}for(let y=0;y<h;y+=s){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}ctx.restore()}
+}
+function render(){paint(document.querySelector('#mainPattern'),'rosette',{cell:168,zoom:1.18,ox:12,oy:-8,bg:'#4b5b12',guides:true,shiftX:16,shiftY:8});paint(document.querySelector('#navPattern'),'rosette',{cell:26,zoom:1.1,bg:'#4b5b12'});
+ document.querySelectorAll('canvas[data-mode]').forEach(c=>paint(c,c.dataset.mode,{cell:38,zoom:1.06,bg:'#4b5b12'}));
+ const variants=[{zoom:.92,ox:-5,oy:4},{zoom:1.16,ox:8,oy:-8},{zoom:1.37,ox:-12,oy:2},{zoom:1.03,ox:15,oy:10},{zoom:1.28,ox:0,oy:-14}];document.querySelectorAll('canvas[data-variant]').forEach((c,i)=>paint(c,i===4?'kaleido':'rosette',{cell:i===4?40:48,bg:'#4b5b12',...variants[i],phase:.15}));
+}
+img.onload=()=>{render();document.body.dataset.ready='true'};
+</script>
+</body>
+</html>

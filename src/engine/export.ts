@@ -1,0 +1,2 @@
+export function validateExport(width:number,height:number){if(!Number.isInteger(width)||!Number.isInteger(height)||width<64||height<64)throw new Error('Dimensions must be whole numbers of at least 64');if(width*height>36_000_000)throw new Error('Export exceeds pixel budget');return{width,height}}
+export function exportFilename(pattern:string,width:number,height:number){return`repeatfield-${pattern.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}-${width}x${height}.png`}

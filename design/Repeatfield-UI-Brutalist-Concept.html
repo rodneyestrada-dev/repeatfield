@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Repeatfield — Neo-Brutalist Concept</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#17151a; --paper:#fffdf5; --lavender:#d8c5ff; --lav-deep:#c9b2fb;
+  --purple:#7a4cff; --acid:#e7ff57; --coral:#ff6b57; --muted:#6d6478;
+  --sh-sm:3px 3px 0 var(--ink); --sh-md:5px 5px 0 var(--ink); --sh-lg:8px 8px 0 var(--ink);
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--lavender);color:var(--ink)}
+body{font-family:"Instrument Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;padding:0}
+.app{width:1440px;height:1024px;position:relative;background:var(--lavender);overflow:hidden}
+/* registration dots background */
+.app:before{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(23,21,26,.13) 1.2px, transparent 1.3px);background-size:26px 26px;pointer-events:none}
+
+/* ============ HEADER ============ */
+.topbar{position:relative;z-index:5;height:84px;background:var(--paper);border-bottom:3px solid var(--ink);display:flex;align-items:stretch}
+.brand{display:flex;align-items:center;gap:14px;padding:0 22px;border-right:3px solid var(--ink);background:var(--paper)}
+.mark{width:44px;height:44px;border:3px solid var(--ink);background:var(--acid);position:relative;box-shadow:var(--sh-sm)}
+.mark:before{content:"";position:absolute;left:-3px;top:50%;right:-3px;border-top:3px solid var(--ink)}
+.mark:after{content:"";position:absolute;top:-3px;left:50%;bottom:-3px;border-left:3px solid var(--ink)}
+.wordmark{font-family:"Bricolage Grotesque";font-weight:800;font-size:23px;letter-spacing:-.6px;line-height:.92}
+.wordmark span{display:block}
+.tm{font:600 9px "IBM Plex Mono";vertical-align:top}
+.stages{display:flex;align-items:center;gap:14px;padding:0 26px;flex:1}
+.stage{display:flex;align-items:center;gap:10px;height:48px;padding:0 16px;border:3px solid var(--ink);background:var(--paper);font-weight:700;font-size:14px;letter-spacing:.02em}
+.stage .num{font:600 11px "IBM Plex Mono";border:2px solid var(--ink);padding:2px 5px;background:var(--paper)}
+.stage.done{background:var(--paper)}
+.stage.done .num{background:var(--acid)}
+.stage.current{background:var(--purple);color:#fff;box-shadow:var(--sh-md)}
+.stage.current .num{background:var(--acid);color:var(--ink);border-color:var(--ink)}
+.stage.todo{opacity:.55}
+.stage-arrow{font-family:"Bricolage Grotesque";font-weight:800;font-size:20px}
+.top-right{display:flex;align-items:center;gap:16px;padding:0 22px;border-left:3px solid var(--ink)}
+.stamp{transform:rotate(-3deg);border:2px solid var(--ink);padding:6px 9px;font:600 9px/1.3 "IBM Plex Mono";letter-spacing:.06em;background:var(--paper)}
+.stamp b{display:block;font-weight:600}
+.export{display:flex;align-items:center;gap:10px;height:52px;padding:0 20px;background:var(--acid);border:3px solid var(--ink);box-shadow:var(--sh-md);font-family:"Bricolage Grotesque";font-weight:800;font-size:16px;letter-spacing:.01em}
+
+/* ============ WORKSPACE ============ */
+.workspace{position:relative;z-index:2;height:940px;display:grid;grid-template-columns:252px 1fr 292px;gap:18px;padding:20px 22px 18px}
+
+/* left rail */
+.rail{display:flex;flex-direction:column;min-height:0}
+.rail-head{background:var(--ink);color:var(--paper);border:3px solid var(--ink);padding:12px 14px 13px;box-shadow:var(--sh-md);position:relative;z-index:2}
+.rail-head .overline{font:600 9px "IBM Plex Mono";letter-spacing:.14em;color:var(--acid)}
+.rail-head h1{font-family:"Bricolage Grotesque";font-weight:700;font-size:22px;line-height:1.02;letter-spacing:-.4px;margin:7px 0 0}
+.preset-stack{margin-top:16px;background:var(--paper);border:3px solid var(--ink);box-shadow:var(--sh-md);padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:11px;flex:0 0 auto}
+.preset{position:relative;border:2px solid var(--ink);background:var(--paper);padding:4px 4px 0;height:112px}
+.preset canvas{display:block;width:100%;height:74px;border:2px solid var(--ink);background:#eee}
+.preset .tab{position:absolute;left:-2px;bottom:0;right:-2px;background:var(--paper);border-top:2px solid var(--ink);font:700 9.5px "Instrument Sans";letter-spacing:.03em;padding:5px 6px;display:flex;justify-content:space-between;align-items:center}
+.preset .tab i{font:600 8px "IBM Plex Mono";font-style:normal}
+.preset.active{box-shadow:4px 4px 0 var(--ink);border-color:var(--ink);transform:translate(-2px,-2px)}
+.preset.active .tab{background:var(--purple);color:#fff}
+.preset.active:after{content:"● ON";position:absolute;top:8px;right:8px;font:700 8px "IBM Plex Mono";background:var(--acid);border:2px solid var(--ink);padding:2px 4px}
+.more{margin-top:14px;height:46px;border:3px solid var(--ink);background:var(--paper);box-shadow:var(--sh-sm);font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.more i{font:600 11px "IBM Plex Mono";font-style:normal;background:var(--acid);border:2px solid var(--ink);padding:2px 6px}
+.source-card{margin-top:auto;background:var(--paper);border:3px solid var(--ink);box-shadow:var(--sh-md);padding:12px;display:flex;gap:12px;align-items:center}
+.source-card img{width:64px;height:64px;object-fit:cover;border:2px solid var(--ink)}
+.source-card .t{font-weight:700;font-size:12px}
+.source-card .m{font:500 8.5px/1.5 "IBM Plex Mono";color:var(--muted);margin-top:4px}
+.source-card .btn-mini{margin-top:7px;display:inline-block;background:var(--coral);border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);font-weight:700;font-size:9.5px;padding:4px 8px}
+
+/* center stage */
+.center{display:grid;grid-template-rows:minmax(0,1fr) 118px;gap:16px;min-width:0}
+.stage-frame{position:relative;border:3px solid var(--ink);background:var(--paper);box-shadow:var(--sh-lg)}
+#mainPattern{width:100%;height:100%;display:block}
+.corner{position:absolute;width:16px;height:16px;border:3px solid var(--ink);z-index:3}
+.corner.tl{top:-3px;left:-3px;border-right:0;border-bottom:0}
+.corner.tr{top:-3px;right:-3px;border-left:0;border-bottom:0}
+.corner.bl{bottom:-3px;left:-3px;border-right:0;border-top:0}
+.corner.br{bottom:-3px;right:-3px;border-left:0;border-top:0}
+.spec-label{position:absolute;top:14px;left:14px;background:var(--paper);border:3px solid var(--ink);box-shadow:var(--sh-sm);padding:9px 12px;z-index:3}
+.spec-label b{display:block;font-family:"Bricolage Grotesque";font-weight:700;font-size:16px;letter-spacing:-.2px}
+.spec-label span{display:block;font:600 8.5px "IBM Plex Mono";letter-spacing:.08em;margin-top:4px;color:var(--muted)}
+.live-tag{position:absolute;top:14px;right:14px;background:var(--acid);border:3px solid var(--ink);box-shadow:var(--sh-sm);padding:8px 11px;font:700 10px "IBM Plex Mono";letter-spacing:.08em;z-index:3;transform:rotate(2deg)}
+.hint-tag{position:absolute;left:14px;bottom:14px;background:var(--ink);color:var(--paper);padding:8px 11px;font:600 9px "IBM Plex Mono";letter-spacing:.05em;z-index:3}
+.navigator{position:absolute;right:14px;bottom:14px;width:132px;background:var(--paper);border:3px solid var(--ink);box-shadow:var(--sh-sm);padding:5px;z-index:3}
+#navPattern{width:100%;height:76px;display:block;border:2px solid var(--ink)}
+.navigator .nv{font:600 8px "IBM Plex Mono";text-align:center;padding:4px 0 1px;letter-spacing:.1em}
+/* variations strip */
+.variations{border:3px solid var(--ink);background:var(--paper);box-shadow:var(--sh-md);display:grid;grid-template-columns:150px 1fr;min-width:0}
+.var-head{border-right:3px solid var(--ink);padding:12px 14px;background:var(--lav-deep)}
+.var-head .overline{font:600 8.5px "IBM Plex Mono";letter-spacing:.12em}
+.var-head h3{font-family:"Bricolage Grotesque";font-weight:700;font-size:16px;line-height:1.05;margin:8px 0 0;letter-spacing:-.3px}
+.var-list{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;padding:12px;min-width:0}
+.variation{position:relative;border:2px solid var(--ink)}
+.variation canvas{display:block;width:100%;height:100%;}
+.variation .vn{position:absolute;left:-2px;top:-2px;background:var(--paper);border:2px solid var(--ink);font:700 8px "IBM Plex Mono";padding:2px 5px}
+.variation.picked{box-shadow:3px 3px 0 var(--ink);transform:translate(-1px,-1px)}
+.variation.picked .vn{background:var(--acid)}
+
+/* right inspector */
+.inspector{display:flex;flex-direction:column;gap:14px;min-height:0}
+.insp-head{background:var(--purple);color:#fff;border:3px solid var(--ink);box-shadow:var(--sh-md);padding:12px 14px;display:flex;justify-content:space-between;align-items:center}
+.insp-head h2{font-family:"Bricolage Grotesque";font-weight:700;font-size:19px;margin:0;letter-spacing:-.3px}
+.insp-head .pg{font:600 10px "IBM Plex Mono";background:var(--paper);color:var(--ink);border:2px solid var(--ink);padding:3px 6px}
+.panel{background:var(--paper);border:3px solid var(--ink);box-shadow:var(--sh-sm);padding:13px 14px}
+.panel-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}
+.panel-title b{font:700 11px "IBM Plex Mono";letter-spacing:.12em}
+.panel-title i{font-style:normal;font:700 12px "IBM Plex Mono";border:2px solid var(--ink);width:18px;height:18px;display:flex;align-items:center;justify-content:center;background:var(--lavender)}
+.control{margin-bottom:13px}.control:last-child{margin-bottom:0}
+.crow{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+.crow label{font-weight:600;font-size:11.5px}
+.value{font:600 10px "IBM Plex Mono";border:2px solid var(--ink);background:var(--lavender);padding:3px 6px;min-width:46px;text-align:right}
+.track{height:10px;border:2px solid var(--ink);background:var(--paper);position:relative}
+.track span{position:absolute;left:0;top:0;bottom:0;background:var(--purple)}
+.track i{position:absolute;top:50%;width:16px;height:16px;background:var(--acid);border:2px solid var(--ink);transform:translate(-50%,-50%);box-shadow:2px 2px 0 var(--ink)}
+.segmented{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.segmented button{height:34px;border:2px solid var(--ink);background:var(--paper);font:700 12px "IBM Plex Mono"}
+.segmented button.on{background:var(--purple);color:#fff;box-shadow:3px 3px 0 var(--ink);transform:translate(-1px,-1px)}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;margin-top:12px}
+.toggle-row span{font-weight:600;font-size:11.5px}
+.switch{width:44px;height:22px;border:2px solid var(--ink);background:var(--acid);position:relative;box-shadow:2px 2px 0 var(--ink)}
+.switch:after{content:"";position:absolute;top:1px;right:1px;width:16px;height:16px;background:var(--ink)}
+.color-row{display:flex;gap:8px}
+.swatch{width:32px;height:32px;border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink)}
+.color-field{height:32px;flex:1;border:2px solid var(--ink);display:flex;align-items:center;padding:0 9px;font:600 10px "IBM Plex Mono";background:var(--lavender)}
+.next-btn{margin-top:auto;height:56px;background:var(--acid);border:3px solid var(--ink);box-shadow:var(--sh-md);font-family:"Bricolage Grotesque";font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+.privacy-strip{border:2px solid var(--ink);background:var(--paper);padding:8px 10px;font:600 8.5px/1.5 "IBM Plex Mono";letter-spacing:.05em;transform:rotate(-1deg)}
+.privacy-strip b{background:var(--acid);padding:1px 4px;border:1.5px solid var(--ink)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="mark"></div>
+      <div class="wordmark"><span>REPEAT/</span><span>FIELD<span class="tm">™</span></span></div>
+    </div>
+    <nav class="stages">
+      <div class="stage done"><span class="num">01</span> CUT IT <span style="font:700 11px 'IBM Plex Mono'">✓</span></div>
+      <div class="stage-arrow">→</div>
+      <div class="stage current"><span class="num">02</span> REPEAT IT</div>
+      <div class="stage-arrow">→</div>
+      <div class="stage todo"><span class="num">03</span> SHOW IT</div>
+    </nav>
+    <div class="top-right">
+      <div class="stamp"><b>NO UPLOAD.</b><b>NO ACCOUNT.</b></div>
+      <button class="export">EXPORT! <span>↓</span></button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="rail">
+      <div class="rail-head">
+        <div class="overline">WAYS TO REPEAT</div>
+        <h1>TURN IT.<br>FLIP IT.<br>REPEAT IT.</h1>
+      </div>
+      <div class="preset-stack">
+        <div class="preset"><canvas data-mode="straight"></canvas><div class="tab">STRAIGHT UP <i>01</i></div></div>
+        <div class="preset active"><canvas data-mode="rosette"></canvas><div class="tab">ROSETTE 4× <i>02</i></div></div>
+        <div class="preset"><canvas data-mode="mirror"></canvas><div class="tab">MIRROR CLUB <i>03</i></div></div>
+        <div class="preset"><canvas data-mode="checker"></canvas><div class="tab">TURN TURN <i>04</i></div></div>
+        <div class="preset"><canvas data-mode="diamond"></canvas><div class="tab">BRICK SHIFT <i>05</i></div></div>
+        <div class="preset"><canvas data-mode="kaleido"></canvas><div class="tab">KALEIDO 8× <i>06</i></div></div>
+      </div>
+      <button class="more">ALL 12 SYSTEMS <i>→</i></button>
+      <div class="source-card">
+        <img src="source-tile.jpg" alt="">
+        <div>
+          <div class="t">YOUR CUT</div>
+          <div class="m">TILE-STUDY-01.JPG<br>1024 × 1024 PX</div>
+          <span class="btn-mini">RE-CUT ✂</span>
+        </div>
+      </div>
+    </aside>
+
+    <section class="center">
+      <div class="stage-frame">
+        <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+        <canvas id="mainPattern"></canvas>
+        <div class="spec-label"><b>ROSETTE 4×</b><span>4-FOLD TURN · SQUARE CELL</span></div>
+        <div class="live-tag">LIVE FIELD</div>
+        <div class="hint-tag">DRAG = MOVE · SCROLL = ZOOM</div>
+        <div class="navigator"><canvas id="navPattern"></canvas><div class="nv">FIELD MAP</div></div>
+      </div>
+      <div class="variations">
+        <div class="var-head">
+          <div class="overline">NEARBY OUTCOMES</div>
+          <h3>SAME RULE,<br>DIFFERENT EDGES.</h3>
+        </div>
+        <div class="var-list">
+          <div class="variation picked"><canvas data-variant="0"></canvas><span class="vn">A·01</span></div>
+          <div class="variation"><canvas data-variant="1"></canvas><span class="vn">A·02</span></div>
+          <div class="variation"><canvas data-variant="2"></canvas><span class="vn">A·03</span></div>
+          <div class="variation"><canvas data-variant="3"></canvas><span class="vn">A·04</span></div>
+          <div class="variation"><canvas data-variant="4"></canvas><span class="vn">A·05</span></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="inspector">
+      <div class="insp-head"><h2>SHAPE THE FIELD</h2><span class="pg">02/12</span></div>
+      <div class="panel">
+        <div class="panel-title"><b>SOURCE</b><i>−</i></div>
+        <div class="control"><div class="crow"><label>Zoom</label><span class="value">1.18×</span></div><div class="track"><span style="width:62%"></span><i style="left:62%"></i></div></div>
+        <div class="control"><div class="crow"><label>Slide ←→</label><span class="value">+12</span></div><div class="track"><span style="width:57%"></span><i style="left:57%"></i></div></div>
+        <div class="control"><div class="crow"><label>Slide ↑↓</label><span class="value">−08</span></div><div class="track"><span style="width:46%"></span><i style="left:46%"></i></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title"><b>FIELD</b><i>−</i></div>
+        <div class="control"><div class="crow"><label>Tile size</label><span class="value">168 PX</span></div><div class="track"><span style="width:54%"></span><i style="left:54%"></i></div></div>
+        <div class="control"><div class="crow"><label>Gap</label><span class="value">0 PX</span></div><div class="track"><span style="width:6%"></span><i style="left:6%"></i></div></div>
+        <div class="toggle-row"><span>Show the seams</span><div class="switch"></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title"><b>SYMMETRY</b><i>−</i></div>
+        <div class="segmented"><button>3</button><button class="on">4</button><button>6</button><button>8</button><button>12</button></div>
+        <div class="toggle-row"><span>Alternate mirror</span><div class="switch"></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title"><b>CANVAS</b><i>−</i></div>
+        <div class="color-row"><div class="swatch" style="background:#4b5b12"></div><div class="color-field">#4B5B12</div></div>
+      </div>
+      <div class="privacy-strip">YOUR TILE <b>NEVER</b> LEAVES THIS TAB.</div>
+      <button class="next-btn"><span>SHOW THE FIELD</span><span>→</span></button>
+    </aside>
+  </main>
+</div>
+<script>
+const img = new Image();
+img.src = 'source-tile.jpg';
+const crop = {x:107,y:90,w:579,h:579};
+function sizeCanvas(c){const r=c.getBoundingClientRect();const d=2;c.width=Math.max(2,Math.round(r.width*d));c.height=Math.max(2,Math.round(r.height*d));const x=c.getContext('2d');x.setTransform(d,0,0,d,0,0);return {ctx:x,w:r.width,h:r.height}}
+function drawCell(ctx,x,y,s,rot=0,fx=1,fy=1,zoom=1,ox=0,oy=0){ctx.save();ctx.translate(x+s/2,y+s/2);ctx.rotate(rot*Math.PI/180);ctx.scale(fx,fy);ctx.beginPath();ctx.rect(-s/2,-s/2,s,s);ctx.clip();const z=s*zoom;ctx.drawImage(img,crop.x,crop.y,crop.w,crop.h,-z/2+ox,-z/2+oy,z,z);ctx.restore()}
+function drawKaleido(ctx,cx,cy,r,segments=8,phase=0){const a=Math.PI*2/segments;for(let i=0;i<segments;i++){ctx.save();ctx.translate(cx,cy);ctx.rotate(i*a);ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(r,Math.tan(a/2)*r);ctx.lineTo(r,-Math.tan(a/2)*r);ctx.closePath();ctx.clip();if(i%2)ctx.scale(1,-1);ctx.rotate(phase);const z=r*2.05;ctx.drawImage(img,crop.x,crop.y,crop.w,crop.h,-z*.46,-z*.50,z,z);ctx.restore()}}
+function paint(canvas,mode='rosette',opt={}){const {ctx,w,h}=sizeCanvas(canvas);ctx.clearRect(0,0,w,h);ctx.fillStyle=opt.bg||'#4b5b12';ctx.fillRect(0,0,w,h);if(mode==='kaleido'){const r=opt.cell||72;for(let y=-r;y<h+r;y+=r*1.46){for(let x=-r;x<w+r;x+=r*1.46){drawKaleido(ctx,x+((Math.floor(y/(r*1.46))%2)*r*.73),y,r,8,opt.phase||0)}}return}
+ const s=opt.cell||126, zoom=opt.zoom||1.02, ox=opt.ox||0, oy=opt.oy||0;
+ for(let row=-2,y=(opt.shiftY||0)-s*2;y<h+s*2;row++,y+=s){for(let col=-2,x=(opt.shiftX||0)-s*2;x<w+s*2;col++,x+=s){let rot=0,fx=1,fy=1;
+  if(mode==='rosette'){const m=[[0,90],[270,180]];rot=m[((row%2)+2)%2][((col%2)+2)%2]}
+  if(mode==='checker')rot=((row+col)&1)?180:0;
+  if(mode==='mirror'){fx=(col&1)?-1:1;fy=(row&1)?-1:1}
+  if(mode==='diamond')rot=45;
+  drawCell(ctx,x,y,s,rot,fx,fy,zoom,ox,oy)
+ }}
+ if(opt.guides){ctx.save();ctx.strokeStyle='rgba(23,21,26,.35)';ctx.lineWidth=1;for(let x=0;x<w;x+=s){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke()}for(let y=0;y<h;y+=s){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}ctx.restore()}
+}
+function render(){paint(document.querySelector('#mainPattern'),'rosette',{cell:168,zoom:1.18,ox:12,oy:-8,bg:'#4b5b12',guides:true,shiftX:16,shiftY:8});paint(document.querySelector('#navPattern'),'rosette',{cell:24,zoom:1.1,bg:'#4b5b12'});
+ document.querySelectorAll('canvas[data-mode]').forEach(c=>paint(c,c.dataset.mode,{cell:36,zoom:1.06,bg:'#4b5b12'}));
+ const variants=[{zoom:.92,ox:-5,oy:4},{zoom:1.16,ox:8,oy:-8},{zoom:1.37,ox:-12,oy:2},{zoom:1.03,ox:15,oy:10},{zoom:1.28,ox:0,oy:-14}];document.querySelectorAll('canvas[data-variant]').forEach((c,i)=>paint(c,i===4?'kaleido':'rosette',{cell:i===4?38:46,bg:'#4b5b12',...variants[i],phase:.15}));
+}
+img.onload=render;
+</script>
+</body>
+</html>
