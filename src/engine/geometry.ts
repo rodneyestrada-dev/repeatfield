@@ -89,6 +89,52 @@ export function wedgeGeometry(segments: number, radius: number) {
     ],
   }));
 }
+export function translateQuad(quad: Quad, delta: Point): Quad {
+  return quad.map((point) => ({
+    x: point.x + delta.x,
+    y: point.y + delta.y,
+  })) as unknown as Quad;
+}
+export function clampQuadTranslation(quad: Quad, delta: Point): Point {
+  const xs = quad.map((point) => point.x);
+  const ys = quad.map((point) => point.y);
+  const clampedX = Math.max(
+    -Math.min(...xs),
+    Math.min(1 - Math.max(...xs), delta.x),
+  );
+  const clampedY = Math.max(
+    -Math.min(...ys),
+    Math.min(1 - Math.max(...ys), delta.y),
+  );
+  return { x: clampedX, y: clampedY };
+}
+export function moveQuadEdge(quad: Quad, edgeIndex: number, delta: Point): Quad {
+  const next = quad.map((point) => ({ ...point })) as unknown as [
+    Point,
+    Point,
+    Point,
+    Point,
+  ];
+  const a = edgeIndex % 4;
+  const b = (edgeIndex + 1) % 4;
+  next[a] = { x: next[a].x + delta.x, y: next[a].y + delta.y };
+  next[b] = { x: next[b].x + delta.x, y: next[b].y + delta.y };
+  return next;
+}
+export function isSimpleConvexQuad(quad: Quad): boolean {
+  let sign = 0;
+  for (let index = 0; index < 4; index++) {
+    const a = quad[index];
+    const b = quad[(index + 1) % 4];
+    const c = quad[(index + 2) % 4];
+    const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+    if (Math.abs(cross) < 1e-9) return false;
+    const current = Math.sign(cross);
+    if (sign === 0) sign = current;
+    else if (current !== sign) return false;
+  }
+  return true;
+}
 export function cropRectForAspect(
   width: number,
   height: number,

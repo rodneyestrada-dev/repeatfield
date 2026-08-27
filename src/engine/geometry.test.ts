@@ -106,3 +106,70 @@ test("quad mapping preserves projective interior points and identity", () => {
   expect(midpoint.x).toBeCloseTo(0.94117647);
   expect(midpoint.y).toBeCloseTo(0.58823529);
 });
+
+import {
+  translateQuad,
+  moveQuadEdge,
+  isSimpleConvexQuad,
+  clampQuadTranslation,
+  type Quad,
+} from "./geometry";
+
+const UNIT_QUAD: Quad = [
+  { x: 0.2, y: 0.2 },
+  { x: 0.8, y: 0.2 },
+  { x: 0.8, y: 0.8 },
+  { x: 0.2, y: 0.8 },
+];
+
+test("whole-quad translation preserves side vectors", () => {
+  const moved = translateQuad(UNIT_QUAD, { x: 0.1, y: -0.05 });
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    expect(moved[j].x - moved[i].x).toBeCloseTo(UNIT_QUAD[j].x - UNIT_QUAD[i].x);
+    expect(moved[j].y - moved[i].y).toBeCloseTo(UNIT_QUAD[j].y - UNIT_QUAD[i].y);
+  }
+  expect(moved[0].x).toBeCloseTo(0.3);
+  expect(moved[0].y).toBeCloseTo(0.15);
+});
+
+test("translation clamps as one unit at every source bound", () => {
+  const right = clampQuadTranslation(UNIT_QUAD, { x: 0.5, y: 0 });
+  expect(right.x).toBeCloseTo(0.2);
+  expect(right.y).toBeCloseTo(0);
+  const upLeft = clampQuadTranslation(UNIT_QUAD, { x: -0.5, y: -0.9 });
+  expect(upLeft.x).toBeCloseTo(-0.2);
+  expect(upLeft.y).toBeCloseTo(-0.2);
+  const clamped = translateQuad(
+    UNIT_QUAD,
+    clampQuadTranslation(UNIT_QUAD, { x: 5, y: 5 }),
+  );
+  expect(Math.max(...clamped.map((p) => p.x))).toBeLessThanOrEqual(1);
+  expect(Math.max(...clamped.map((p) => p.y))).toBeLessThanOrEqual(1);
+});
+
+test("edge movement changes only that edge's two endpoints", () => {
+  const moved = moveQuadEdge(UNIT_QUAD, 0, { x: 0, y: -0.1 });
+  expect(moved[0]).toEqual({ x: 0.2, y: 0.1 });
+  expect(moved[1]).toEqual({ x: 0.8, y: 0.1 });
+  expect(moved[2]).toEqual(UNIT_QUAD[2]);
+  expect(moved[3]).toEqual(UNIT_QUAD[3]);
+});
+
+test("crossed and degenerate quadrilaterals are rejected", () => {
+  expect(isSimpleConvexQuad(UNIT_QUAD)).toBe(true);
+  const crossed: Quad = [
+    { x: 0.2, y: 0.2 },
+    { x: 0.8, y: 0.8 },
+    { x: 0.8, y: 0.2 },
+    { x: 0.2, y: 0.8 },
+  ];
+  expect(isSimpleConvexQuad(crossed)).toBe(false);
+  const degenerate: Quad = [
+    { x: 0.5, y: 0.5 },
+    { x: 0.5, y: 0.5 },
+    { x: 0.5, y: 0.5 },
+    { x: 0.5, y: 0.5 },
+  ];
+  expect(isSimpleConvexQuad(degenerate)).toBe(false);
+});
