@@ -129,7 +129,7 @@ function ShapesStage({
       for (let y = 0; y < r.height; y += checker)
         for (let xx = 0; xx < r.width; xx += checker) {
           x.fillStyle =
-            (xx / checker + y / checker) % 2 ? "#e5e0ea" : "#f7f4f8";
+            (xx / checker + y / checker) % 2 ? "#ece2d6" : "#faf5ee";
           x.fillRect(xx, y, checker, checker);
         }
       const fit =
@@ -460,7 +460,7 @@ function AssembleStage({
       for (let y = 0; y < r.height; y += checker)
         for (let xx = 0; xx < r.width; xx += checker) {
           x.fillStyle =
-            (xx / checker + y / checker) % 2 ? "#e5e0ea" : "#f7f4f8";
+            (xx / checker + y / checker) % 2 ? "#ece2d6" : "#faf5ee";
           x.fillRect(xx, y, checker, checker);
         }
       renderTessellation(x, shapes, composition, r.width, r.height, {

@@ -646,7 +646,7 @@ export function renderCrop(
   const checker = 16;
   for (let y = 0; y < height; y += checker)
     for (let x = 0; x < width; x += checker) {
-      ctx.fillStyle = (x / checker + y / checker) % 2 ? "#e5e0ea" : "#f7f4f8";
+      ctx.fillStyle = (x / checker + y / checker) % 2 ? "#ece2d6" : "#faf5ee";
       ctx.fillRect(x, y, checker, checker);
     }
   const source = preparedSource(img, crop),

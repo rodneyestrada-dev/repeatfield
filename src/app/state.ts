@@ -149,7 +149,7 @@ export const DEFAULT_FIELD_COMPOSITION: FieldComposition = {
   fieldRotation: 0,
   segments: 8,
   showGuides: false,
-  background: "#ece8f2",
+  background: "#f2ece3",
   sourceZoom: 1,
   sourceOffsetX: 0,
   sourceOffsetY: 0,
