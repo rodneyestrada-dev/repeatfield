@@ -84,6 +84,7 @@ export function TileSetEditor({
               ? `Replace ${ROLE_LABELS[activeRole]} image`
               : `Upload ${ROLE_LABELS[activeRole]} image`}
             <input
+              key={activeRole}
               aria-label={`Upload ${ROLE_LABELS[activeRole]} image`}
               type="file"
               accept="image/png,image/jpeg,image/webp"

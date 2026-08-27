@@ -178,6 +178,10 @@ input:focus-visible {
   position: absolute;
   opacity: 0;
   pointer-events: none;
+  width: 1px;
+  height: 1px;
+  left: 0;
+  top: 0;
 }
 .filebar > span {
   margin-left: auto;
@@ -726,7 +730,7 @@ h2 {
     overflow-x: hidden;
   }
   .topbar {
-    grid-template-columns: 145px minmax(0, 1fr);
+    grid-template-columns: 145px minmax(0, 1fr) auto;
     width: 100vw;
     max-width: 100vw;
     min-width: 0;
@@ -760,6 +764,11 @@ h2 {
   }
   .filebar {
     padding: 0 10px;
+    overflow-x: auto;
+    max-width: 100vw;
+  }
+  .filebar .button {
+    white-space: nowrap;
   }
   .filebar > span,
   .filebar small {

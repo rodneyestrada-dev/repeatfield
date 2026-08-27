@@ -164,6 +164,7 @@ function ShapesStage({
             ? `Replace ${SHAPE_LABELS[activeShape]} image`
             : `Upload ${SHAPE_LABELS[activeShape]} image`}
           <input
+            key={activeShape}
             aria-label={`Upload ${SHAPE_LABELS[activeShape]} image`}
             type="file"
             accept="image/png,image/jpeg,image/webp"
