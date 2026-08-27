@@ -51,6 +51,24 @@ export function mapHomography(m: Homography, p: Point): Point {
 export function mapUnitSquareToQuad(quad: Quad, p: Point): Point {
   return mapHomography(homographyFromUnitSquare(quad), p);
 }
+export function invertHomography(m: Homography): Homography {
+  const [a, b, c, d, e, f, g, h, i] = m;
+  const A = e * i - f * h,
+    B = c * h - b * i,
+    C = b * f - c * e,
+    D = f * g - d * i,
+    E = a * i - c * g,
+    F = c * d - a * f,
+    G = d * h - e * g,
+    H = b * g - a * h,
+    I = a * e - b * d;
+  const det = a * A + b * D + c * G;
+  const s = Math.abs(det) < 1e-12 ? 0 : 1 / det;
+  return [A * s, B * s, C * s, D * s, E * s, F * s, G * s, H * s, I * s];
+}
+export function mapQuadToUnitSquare(quad: Quad, p: Point): Point {
+  return mapHomography(invertHomography(homographyFromUnitSquare(quad)), p);
+}
 export function cellTransform(
   id: PatternId,
   row: number,

@@ -1,25 +1,17 @@
 import type { Quad } from "./geometry";
 import { mapUnitSquareToQuad } from "./geometry";
-import type { PatternId, RepeatSettings } from "./patterns";
 import { applyAlphaMask, hexToRgb } from "./background";
-
-export interface CropRenderState {
-  aspect: string;
-  zoom: number;
-  panX: number;
-  panY: number;
-  rotation: number;
-  fineRotation: number;
-  flipX: boolean;
-  flipY: boolean;
-  quad: Quad;
-  backgroundRemoval: {
-    enabled: boolean;
-    color: string;
-    tolerance: number;
-    feather: number;
-  };
-}
+import type { MetatileState } from "./metatile";
+import { computeFrameLayout, type TileRole } from "./frameLayout";
+import { applyLook, isDefaultLook, type SetLook } from "./appearance";
+import type {
+  CropState,
+  FieldComposition,
+  TessellateComposition,
+  TileSetComposition,
+} from "../app/state";
+import { latticeOffsets, type ShapeInstance } from "./tessellation";
+import { analyzeCoverage, type CoverageResult } from "./coverage";
 
 type SizedSource = CanvasImageSource & { width: number; height: number };
 type P = { x: number; y: number };
@@ -31,9 +23,13 @@ function canvas(width: number, height: number) {
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// Source preparation
+// ---------------------------------------------------------------------------
+
 export function orientedSource(
   img: SizedSource,
-  crop: CropRenderState,
+  crop: Pick<CropState, "rotation" | "flipX" | "flipY">,
 ): HTMLCanvasElement {
   const turns = ((Math.round(crop.rotation / 90) % 4) + 4) % 4;
   const swap = turns % 2 === 1;
@@ -51,7 +47,7 @@ export function orientedSource(
 
 export function preparedSource(
   img: SizedSource,
-  crop: CropRenderState,
+  crop: CropState,
 ): HTMLCanvasElement {
   const result = orientedSource(img, crop);
   if (!crop.backgroundRemoval.enabled) return result;
@@ -67,6 +63,18 @@ export function preparedSource(
   );
   ctx.putImageData(image, 0, 0);
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Warp: the sampling quad is the warpQuad expressed inside the selection.
+// Moving the selection moves the whole sample; moving warp pins changes the
+// mapping into the square target without moving the selection.
+// ---------------------------------------------------------------------------
+
+export function effectiveSamplingQuad(crop: CropState): Quad {
+  return crop.warpQuad.map((pin) =>
+    mapUnitSquareToQuad(crop.selectionQuad, pin),
+  ) as unknown as Quad;
 }
 
 function affineTriangle(
@@ -149,67 +157,102 @@ export function rectifyQuad(
   return result;
 }
 
-function drawTile(
-  ctx: CanvasRenderingContext2D,
-  tile: SizedSource,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  repeat: RepeatSettings,
-  rotation = 0,
-  fx = 1,
-  fy = 1,
-  clip: "rect" | "triangle" = "rect",
-) {
-  ctx.save();
-  ctx.translate(x + w / 2, y + h / 2);
-  ctx.rotate(((rotation + repeat.sourceRotation) * Math.PI) / 180);
-  ctx.scale(fx, fy);
-  ctx.beginPath();
-  if (clip === "triangle") {
-    ctx.moveTo(-w / 2, h / 2);
-    ctx.lineTo(0, -h / 2);
-    ctx.lineTo(w / 2, h / 2);
-    ctx.closePath();
-  } else ctx.rect(-w / 2, -h / 2, w, h);
-  ctx.clip();
-  const z = repeat.sourceZoom;
-  ctx.translate(repeat.sourceOffsetX, repeat.sourceOffsetY);
-  ctx.drawImage(tile, (-w * z) / 2, (-h * z) / 2, w * z, h * z);
-  ctx.restore();
+/** The single rectified square tile every downstream stage consumes. */
+export function rectifiedTile(
+  img: SizedSource,
+  crop: CropState,
+  size = 512,
+): HTMLCanvasElement {
+  return rectifyQuad(preparedSource(img, crop), effectiveSamplingQuad(crop), size);
 }
 
-export function renderPattern(
+// ---------------------------------------------------------------------------
+// Tile Turn: render the 2×2 Repeat Block (metatile)
+// ---------------------------------------------------------------------------
+
+export function renderMetatile(
+  sourceTile: SizedSource,
+  metatile: MetatileState,
+  cellSize: number,
+): HTMLCanvasElement {
+  const result = canvas(cellSize * 2, cellSize * 2);
+  const ctx = result.getContext("2d")!;
+  metatile.cells.forEach((turn, index) => {
+    const column = index % 2;
+    const row = Math.floor(index / 2);
+    ctx.save();
+    ctx.translate(
+      column * cellSize + cellSize / 2,
+      row * cellSize + cellSize / 2,
+    );
+    ctx.rotate((turn * Math.PI) / 2);
+    ctx.drawImage(sourceTile, -cellSize / 2, -cellSize / 2, cellSize, cellSize);
+    ctx.restore();
+  });
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Field Tile: Tile Turn → Field Layout → optional Advanced Symmetry
+// ---------------------------------------------------------------------------
+
+function sourceAdjustedTile(
+  tile: SizedSource,
+  composition: FieldComposition,
+  size: number,
+): HTMLCanvasElement {
+  const result = canvas(size, size);
+  const ctx = result.getContext("2d")!;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, size, size);
+  ctx.clip();
+  ctx.translate(size / 2, size / 2);
+  ctx.rotate((composition.sourceRotation * Math.PI) / 180);
+  ctx.translate(composition.sourceOffsetX, composition.sourceOffsetY);
+  const z = composition.sourceZoom;
+  ctx.drawImage(tile, (-size * z) / 2, (-size * z) / 2, size * z, size * z);
+  ctx.restore();
+  return result;
+}
+
+export function renderFieldComposition(
   ctx: CanvasRenderingContext2D,
   img: SizedSource,
   width: number,
   height: number,
-  crop: CropRenderState,
-  repeat: RepeatSettings,
+  crop: CropState,
+  composition: FieldComposition,
 ) {
-  const tile = rectifyQuad(preparedSource(img, crop), crop.quad);
+  const base = rectifiedTile(img, crop);
+  const cell = Math.max(8, composition.tileScale);
+  const adjusted = sourceAdjustedTile(base, composition, 256);
+  const block = renderMetatile(adjusted, composition.metatile, cell);
+  const transparent = crop.backgroundRemoval.enabled;
+
   ctx.save();
   ctx.clearRect(0, 0, width, height);
-  if (!crop.backgroundRemoval.enabled) {
-    ctx.fillStyle = repeat.background;
+  if (!transparent) {
+    ctx.fillStyle = composition.background;
     ctx.fillRect(0, 0, width, height);
   }
   ctx.translate(width / 2, height / 2);
-  ctx.rotate((repeat.fieldRotation * Math.PI) / 180);
+  ctx.rotate((composition.fieldRotation * Math.PI) / 180);
   ctx.translate(-width / 2, -height / 2);
-  const size = repeat.tileScale,
-    gap = repeat.gap,
-    step = size + gap,
-    over = Math.ceil(Math.hypot(width, height) / step) + 3;
-  if (repeat.patternId === "radial-kaleidoscope") {
-    const angle = (Math.PI * 2) / repeat.segments,
-      radius = size * 0.72;
+
+  const gap = composition.gap;
+  const blockStep = cell * 2 + gap;
+
+  if (composition.symmetry === "radial-kaleidoscope") {
+    const segments = composition.segments;
+    const angle = (Math.PI * 2) / segments;
+    const radius = cell * 1.45;
+    const step = radius * 2 + gap;
     for (let row = -2; row < height / step + 2; row++)
       for (let column = -2; column < width / step + 2; column++)
-        for (let index = 0; index < repeat.segments; index++) {
-          const cx = column * step + size / 2,
-            cy = row * step + size / 2;
+        for (let index = 0; index < segments; index++) {
+          const cx = column * step + radius;
+          const cy = row * step + radius;
           ctx.save();
           ctx.translate(cx, cy);
           ctx.rotate(index * angle);
@@ -220,61 +263,63 @@ export function renderPattern(
           ctx.closePath();
           ctx.clip();
           if (index % 2) ctx.scale(1, -1);
-          drawTile(ctx, tile, -radius, -radius, radius * 2, radius * 2, repeat);
+          ctx.drawImage(adjusted, -radius, -radius, radius * 2, radius * 2);
           ctx.restore();
         }
-  } else
+  } else if (composition.symmetry === "triangle-kaleidoscope") {
+    const step = cell + gap;
+    const over = Math.ceil(Math.hypot(width, height) / step) + 3;
     for (let row = -over; row < over; row++)
       for (let column = -over; column < over; column++) {
-        let x = column * step,
-          y = row * step,
-          rotation = 0,
-          fx = 1,
-          fy = 1;
-        if (repeat.patternId === "half-drop" && Math.abs(column) % 2 === 1)
-          y += step / 2;
-        if (repeat.patternId === "brick" && Math.abs(row) % 2 === 1)
-          x += step / 2;
-        if (repeat.patternId === "checker-rotate" && (row + column) % 2 !== 0)
-          rotation = 180;
-        if (repeat.patternId === "mirror-grid") {
+        const rotation = ((row + column) % 2) * 180;
+        const fx = column % 2 ? -1 : 1;
+        ctx.save();
+        ctx.translate(column * step + cell / 2, row * step + cell / 2);
+        ctx.rotate((rotation * Math.PI) / 180);
+        ctx.scale(fx, 1);
+        ctx.beginPath();
+        ctx.moveTo(-cell / 2, cell / 2);
+        ctx.lineTo(0, -cell / 2);
+        ctx.lineTo(cell / 2, cell / 2);
+        ctx.closePath();
+        ctx.clip();
+        ctx.drawImage(adjusted, -cell / 2, -cell / 2, cell, cell);
+        ctx.restore();
+      }
+  } else {
+    const over = Math.ceil(Math.hypot(width, height) / blockStep) + 2;
+    for (let row = -over; row < over; row++)
+      for (let column = -over; column < over; column++) {
+        let x = column * blockStep;
+        let y = row * blockStep;
+        if (composition.layout === "brick" && Math.abs(row) % 2 === 1)
+          x += blockStep / 2;
+        if (composition.layout === "half-drop" && Math.abs(column) % 2 === 1)
+          y += blockStep / 2;
+        let fx = 1;
+        let fy = 1;
+        if (composition.symmetry === "mirror-grid") {
           fx = column % 2 === 0 ? 1 : -1;
           fy = row % 2 === 0 ? 1 : -1;
         }
-        if (repeat.patternId === "quarter-turn-rosette")
-          rotation = [
-            [0, 90],
-            [270, 180],
-          ][((row % 2) + 2) % 2][((column % 2) + 2) % 2];
-        const triangle = repeat.patternId === "triangle-kaleidoscope";
-        if (triangle) {
-          rotation = ((row + column) % 2) * 180;
-          fx = column % 2 ? -1 : 1;
-        }
-        drawTile(
-          ctx,
-          tile,
-          x,
-          y,
-          size,
-          size,
-          repeat,
-          rotation,
-          fx,
-          fy,
-          triangle ? "triangle" : "rect",
-        );
+        ctx.save();
+        ctx.translate(x + cell, y + cell);
+        ctx.scale(fx, fy);
+        ctx.drawImage(block, -cell, -cell, cell * 2, cell * 2);
+        ctx.restore();
       }
-  if (repeat.showGuides) {
+  }
+
+  if (composition.showGuides) {
     ctx.strokeStyle = "rgba(71,49,91,.35)";
     ctx.lineWidth = 1;
-    for (let x = 0; x < width; x += step) {
+    for (let x = 0; x < width; x += blockStep) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, height);
       ctx.stroke();
     }
-    for (let y = 0; y < height; y += step) {
+    for (let y = 0; y < height; y += blockStep) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(width, y);
@@ -283,6 +328,285 @@ export function renderPattern(
   }
   ctx.restore();
 }
+
+/** Simple 2×2 straight seam preview used by the Crop stage. */
+export function renderSeamCheck(
+  ctx: CanvasRenderingContext2D,
+  img: SizedSource,
+  width: number,
+  height: number,
+  crop: CropState,
+) {
+  const tile = rectifiedTile(img, crop, 256);
+  ctx.clearRect(0, 0, width, height);
+  const cell = Math.min(width, height) / 2;
+  for (let row = 0; row < Math.ceil(height / cell); row++)
+    for (let column = 0; column < Math.ceil(width / cell); column++)
+      ctx.drawImage(tile, column * cell, row * cell, cell, cell);
+  ctx.strokeStyle = "rgba(71,49,91,.35)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(cell, 0, 0.5, height);
+  ctx.strokeRect(0, cell, width, 0.5);
+}
+
+// ---------------------------------------------------------------------------
+// Tile Set: Field interior + Edge runs + Corner joins
+// ---------------------------------------------------------------------------
+
+export interface RoleTiles {
+  field: HTMLCanvasElement | null;
+  border: HTMLCanvasElement | null;
+  corner: HTMLCanvasElement | null;
+}
+
+const ROLE_PLACEHOLDERS: Record<TileRole, string> = {
+  field: "#d9d2e5",
+  border: "#cbc0dd",
+  corner: "#b9aad1",
+};
+
+export function lookedTile(
+  tile: HTMLCanvasElement,
+  look: SetLook,
+): HTMLCanvasElement {
+  if (isDefaultLook(look)) return tile;
+  const result = canvas(tile.width, tile.height);
+  const ctx = result.getContext("2d", { willReadFrequently: true })!;
+  ctx.drawImage(tile, 0, 0);
+  const image = ctx.getImageData(0, 0, result.width, result.height);
+  image.data.set(applyLook(image.data, look));
+  ctx.putImageData(image, 0, 0);
+  return result;
+}
+
+export function renderTileSetComposition(
+  ctx: CanvasRenderingContext2D,
+  roles: RoleTiles,
+  composition: TileSetComposition,
+  look: SetLook,
+  width: number,
+  height: number,
+) {
+  const borderOn = composition.borderEnabled && roles.border !== null;
+  const placements = computeFrameLayout({
+    fieldColumns: composition.fieldColumns,
+    fieldRows: composition.fieldRows,
+    tileSize: 100,
+    borderEnabled: borderOn,
+    cornerEnabled:
+      borderOn && composition.cornerEnabled && roles.corner !== null,
+    borderPhase: composition.borderPhase,
+    borderAlternate: composition.borderAlternate,
+    borderReverse: composition.borderReverse,
+    cornerBaseRotation: composition.cornerBaseRotation,
+    cornerOverrides: composition.cornerOverrides,
+  });
+  const columns = composition.fieldColumns + (borderOn ? 2 : 0);
+  const rows = composition.fieldRows + (borderOn ? 2 : 0);
+  const grout = composition.groutWidth;
+  const cell = Math.min(
+    (width - grout * (columns + 1)) / columns,
+    (height - grout * (rows + 1)) / rows,
+  );
+  const totalWidth = columns * cell + (columns + 1) * grout;
+  const totalHeight = rows * cell + (rows + 1) * grout;
+  const originX = (width - totalWidth) / 2;
+  const originY = (height - totalHeight) / 2;
+
+  ctx.save();
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = composition.groutColor;
+  ctx.fillRect(originX, originY, totalWidth, totalHeight);
+
+  const cache = new Map<TileRole, HTMLCanvasElement | null>();
+  const roleTile = (role: TileRole) => {
+    if (!cache.has(role)) {
+      const tile = roles[role];
+      cache.set(role, tile ? lookedTile(tile, look) : null);
+    }
+    return cache.get(role)!;
+  };
+
+  for (const placement of placements) {
+    const column = placement.x / 100;
+    const row = placement.y / 100;
+    const x = originX + grout + column * (cell + grout);
+    const y = originY + grout + row * (cell + grout);
+    const tile = roleTile(placement.role);
+    ctx.save();
+    ctx.translate(x + cell / 2, y + cell / 2);
+    ctx.rotate((placement.rotation * Math.PI) / 180);
+    if (tile) ctx.drawImage(tile, -cell / 2, -cell / 2, cell, cell);
+    else {
+      ctx.fillStyle = ROLE_PLACEHOLDERS[placement.role];
+      ctx.fillRect(-cell / 2, -cell / 2, cell, cell);
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// Tessellate: shape instances repeated across the U/V lattice
+// ---------------------------------------------------------------------------
+
+export interface ShapeSources {
+  primary: HTMLCanvasElement | null;
+  infill: HTMLCanvasElement | null;
+}
+
+function drawInstance(
+  ctx: CanvasRenderingContext2D,
+  source: HTMLCanvasElement,
+  instance: ShapeInstance,
+  offsetX: number,
+  offsetY: number,
+  alpha = 1,
+) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(instance.position.x + offsetX, instance.position.y + offsetY);
+  ctx.rotate((instance.rotation * Math.PI) / 180);
+  if (instance.reflected) ctx.scale(-1, 1);
+  ctx.drawImage(source, -source.width / 2, -source.height / 2);
+  ctx.restore();
+}
+
+export function renderTessellation(
+  ctx: CanvasRenderingContext2D,
+  shapes: ShapeSources,
+  composition: TessellateComposition,
+  width: number,
+  height: number,
+  options: { ghostCells?: boolean; export?: boolean } = {},
+) {
+  ctx.save();
+  ctx.clearRect(0, 0, width, height);
+  const { u, v } = composition.lattice;
+  const isField = composition.outputMode === "field";
+  const offsets =
+    isField || options.ghostCells
+      ? latticeOffsets(u, v, 1)
+      : [{ x: 0, y: 0 }];
+  const source = (shapeId: string) =>
+    shapeId === "infill" ? shapes.infill : shapes.primary;
+  for (const offset of offsets) {
+    const isCenter = offset.x === 0 && offset.y === 0;
+    const alpha = isCenter || isField || options.export ? 1 : 0.35;
+    if (!isField && !isCenter && !options.ghostCells) continue;
+    if (!isField && !isCenter && options.export) continue;
+    for (const instance of composition.instances) {
+      const image = source(instance.shapeId);
+      if (image) drawInstance(ctx, image, instance, offset.x, offset.y, alpha);
+    }
+  }
+  ctx.restore();
+}
+
+export function drawRepeatCellBoundary(
+  ctx: CanvasRenderingContext2D,
+  composition: TessellateComposition,
+  originX: number,
+  originY: number,
+) {
+  const { u, v } = composition.lattice;
+  ctx.save();
+  ctx.setLineDash([6, 5]);
+  ctx.strokeStyle = "rgba(96,64,150,.7)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(originX, originY);
+  ctx.lineTo(originX + u.x, originY + u.y);
+  ctx.lineTo(originX + u.x + v.x, originY + u.y + v.y);
+  ctx.lineTo(originX + v.x, originY + v.y);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Rasterize instance alpha into stamp masks and run coverage analysis. */
+export function tessellationCoverage(
+  shapes: ShapeSources,
+  composition: TessellateComposition,
+  scale = 0.5,
+): CoverageResult | null {
+  const { u, v } = composition.lattice;
+  const cellWidth = Math.max(4, Math.round(Math.abs(u.x + v.x) * scale));
+  const cellHeight = Math.max(4, Math.round(Math.abs(u.y + v.y) * scale));
+  if (!composition.instances.length) return null;
+  const stamps = [];
+  for (const instance of composition.instances) {
+    const image =
+      instance.shapeId === "infill" ? shapes.infill : shapes.primary;
+    if (!image) continue;
+    const diagonal = Math.ceil(Math.hypot(image.width, image.height) * scale);
+    const stampCanvas = canvas(diagonal, diagonal);
+    const stampCtx = stampCanvas.getContext("2d", {
+      willReadFrequently: true,
+    })!;
+    stampCtx.translate(diagonal / 2, diagonal / 2);
+    stampCtx.rotate((instance.rotation * Math.PI) / 180);
+    if (instance.reflected) stampCtx.scale(-1, 1);
+    stampCtx.drawImage(
+      image,
+      (-image.width * scale) / 2,
+      (-image.height * scale) / 2,
+      image.width * scale,
+      image.height * scale,
+    );
+    const pixels = stampCtx.getImageData(0, 0, diagonal, diagonal).data;
+    const mask = new Uint8Array(diagonal * diagonal);
+    for (let index = 0; index < mask.length; index++)
+      mask[index] = pixels[index * 4 + 3] > 96 ? 1 : 0;
+    stamps.push({
+      data: mask,
+      width: diagonal,
+      height: diagonal,
+      offsetX: Math.round(instance.position.x * scale - diagonal / 2),
+      offsetY: Math.round(instance.position.y * scale - diagonal / 2),
+    });
+  }
+  if (!stamps.length) return null;
+  return analyzeCoverage(
+    cellWidth,
+    cellHeight,
+    stamps,
+    { x: u.x * scale, y: u.y * scale },
+    { x: v.x * scale, y: v.y * scale },
+  );
+}
+
+export function renderCoverageHeatmap(
+  ctx: CanvasRenderingContext2D,
+  result: CoverageResult,
+  width: number,
+  height: number,
+) {
+  const image = ctx.createImageData(result.cellWidth, result.cellHeight);
+  for (let index = 0; index < result.counts.length; index++) {
+    const count = result.counts[index];
+    const offset = index * 4;
+    if (count === 0) {
+      image.data[offset] = 225;
+      image.data[offset + 1] = 60;
+      image.data[offset + 2] = 60;
+      image.data[offset + 3] = 190;
+    } else if (count >= 2) {
+      image.data[offset] = 220;
+      image.data[offset + 1] = 60;
+      image.data[offset + 2] = 220;
+      image.data[offset + 3] = 190;
+    }
+  }
+  const buffer = canvas(result.cellWidth, result.cellHeight);
+  buffer.getContext("2d")!.putImageData(image, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(buffer, 0, 0, width, height);
+}
+
+// ---------------------------------------------------------------------------
+// Crop stage backdrop
+// ---------------------------------------------------------------------------
 
 export function sourceDisplayRect(
   width: number,
@@ -301,7 +625,7 @@ export function renderCrop(
   img: SizedSource,
   width: number,
   height: number,
-  crop: CropRenderState,
+  crop: CropState,
 ) {
   ctx.clearRect(0, 0, width, height);
   const checker = 16;
@@ -314,5 +638,3 @@ export function renderCrop(
     rect = sourceDisplayRect(width, height, source.width, source.height);
   ctx.drawImage(source, rect.x, rect.y, rect.width, rect.height);
 }
-
-export type { PatternId };
