@@ -1,52 +1,83 @@
 import {
   rotateCell,
   rotateMetatile,
+  reflectCell,
   metatileCode,
   canonicalRotationCode,
   enumerateMetatiles,
   enumerateCanonicalMetatiles,
   DEFAULT_METATILE,
+  normalizeMetatile,
+  type CellTransform,
   type MetatileState,
 } from "./metatile";
 
-// Cell order is row-major: [top-left, top-right, bottom-left, bottom-right].
+const cell = (rotation: 0 | 1 | 2 | 3, flipX = false, flipY = false): CellTransform => ({
+  rotation,
+  flipX,
+  flipY,
+});
+const block = (rotations: readonly [0 | 1 | 2 | 3, 0 | 1 | 2 | 3, 0 | 1 | 2 | 3, 0 | 1 | 2 | 3]): MetatileState =>
+  normalizeMetatile({ size: 2, cells: rotations });
 
-test("rotateCell steps quarter turns in both directions and wraps", () => {
-  expect(rotateCell(0, 1)).toBe(1);
-  expect(rotateCell(3, 1)).toBe(0);
-  expect(rotateCell(0, -1)).toBe(3);
-  expect(rotateCell(2, -1)).toBe(1);
+test("normalizes legacy scalar quarter turns into explicit cell transforms", () => {
+  expect(normalizeMetatile({ size: 2, cells: [0, 1, 2, 3] })).toEqual({
+    size: 2,
+    cells: [cell(0), cell(1), cell(2), cell(3)],
+  });
 });
 
-test("default metatile is a 2x2 block of unrotated cells", () => {
-  expect(DEFAULT_METATILE).toEqual({ size: 2, cells: [0, 0, 0, 0] });
+test("normalization sanitizes malformed transforms without sharing cell objects", () => {
+  const normalized = normalizeMetatile({ cells: [{ rotation: 9, flipX: 1 }, null] });
+  expect(normalized.cells).toEqual([cell(1), cell(0), cell(0), cell(0)]);
+  expect(normalized.cells[2]).not.toBe(normalized.cells[3]);
 });
 
-test("whole-block rotation permutes positions and increments each cell", () => {
-  const block: MetatileState = { size: 2, cells: [0, 1, 2, 3] };
-  // CW: new TL = old BL+1, new TR = old TL+1, new BL = old BR+1, new BR = old TR+1
-  expect(rotateMetatile(block, 1).cells).toEqual([3, 1, 0, 2]);
-  expect(rotateMetatile(rotateMetatile(block, 1), -1).cells).toEqual(
-    block.cells,
-  );
-  // Four CW rotations return to start
-  let b = block;
-  for (let i = 0; i < 4; i++) b = rotateMetatile(b, 1);
-  expect(b.cells).toEqual(block.cells);
+test("reflectCell toggles only the requested local axis", () => {
+  expect(reflectCell(cell(1, false, true), "x")).toEqual(cell(1, true, true));
+  expect(reflectCell(cell(1, false, true), "y")).toEqual(cell(1, false, false));
 });
 
-test("metatile codes are stable digit strings", () => {
-  expect(metatileCode({ size: 2, cells: [0, 1, 2, 3] })).toBe("0123");
-  expect(metatileCode(DEFAULT_METATILE)).toBe("0000");
+test("rotateCell steps quarter turns in both directions, wraps, and preserves reflections", () => {
+  expect(rotateCell(cell(0, true), 1)).toEqual(cell(1, true));
+  expect(rotateCell(cell(3), 1)).toEqual(cell(0));
+  expect(rotateCell(cell(0, false, true), -1)).toEqual(cell(3, false, true));
+  expect(rotateCell(cell(2), -1)).toEqual(cell(1));
+});
+
+test("default metatile is a 2x2 block of identity transforms", () => {
+  expect(DEFAULT_METATILE).toEqual({ size: 2, cells: [cell(0), cell(0), cell(0), cell(0)] });
+});
+
+test("whole-block rotation moves cells, rotates artwork, and preserves reflection flags", () => {
+  const source: MetatileState = {
+    size: 2,
+    cells: [cell(0, true), cell(1, false, true), cell(2, true, true), cell(3)],
+  };
+  expect(rotateMetatile(source, 1).cells).toEqual([
+    cell(3, true, true),
+    cell(1, true),
+    cell(0),
+    cell(2, false, true),
+  ]);
+  expect(rotateMetatile(rotateMetatile(source, 1), -1)).toEqual(source);
+  let current = source;
+  for (let index = 0; index < 4; index++) current = rotateMetatile(current, 1);
+  expect(current).toEqual(source);
+});
+
+test("metatile codes are stable and include reflection state", () => {
+  expect(metatileCode(block([0, 1, 2, 3]))).toBe("0123");
+  expect(metatileCode({ size: 2, cells: [cell(0, true), cell(1), cell(2), cell(3, false, true)] })).toBe("0x123y");
 });
 
 test("canonical code is invariant under whole-block rotation", () => {
-  const block: MetatileState = { size: 2, cells: [0, 1, 2, 3] };
-  const canonical = canonicalRotationCode(block);
-  let b = block;
-  for (let i = 0; i < 3; i++) {
-    b = rotateMetatile(b, 1);
-    expect(canonicalRotationCode(b)).toBe(canonical);
+  const source = block([0, 1, 2, 3]);
+  const canonical = canonicalRotationCode(source);
+  let current = source;
+  for (let index = 0; index < 3; index++) {
+    current = rotateMetatile(current, 1);
+    expect(canonicalRotationCode(current)).toBe(canonical);
   }
 });
 
@@ -57,7 +88,6 @@ test("raw enumeration yields exactly 256 blocks and canonical yields 70", () => 
   const canonical = enumerateCanonicalMetatiles();
   expect(canonical).toHaveLength(70);
   const canonicalCodes = new Set(canonical.map(metatileCode));
-  // every raw block maps into the canonical set
-  for (const block of raw)
-    expect(canonicalCodes.has(canonicalRotationCode(block))).toBe(true);
+  for (const item of raw)
+    expect(canonicalCodes.has(canonicalRotationCode(item))).toBe(true);
 });

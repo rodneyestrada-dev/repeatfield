@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { App, demoImageUrl } from "./App";
+import { App, demoImageUrl, repeatfieldAssetUrl, chooseHeroTurnTargets } from "./App";
 import { STORAGE_KEY } from "./state";
 
 beforeEach(() => localStorage.clear());
@@ -9,12 +9,52 @@ test("resolves the demo image beneath the deployed base path", () => {
   expect(demoImageUrl("/repeatfield/")).toBe("/repeatfield/source-tile.jpg");
 });
 
+test("resolves original brand assets beneath the deployed base path", () => {
+  expect(repeatfieldAssetUrl("/repeatfield/", "repeatfield-tile-logo.svg")).toBe(
+    "/repeatfield/repeatfield-tile-logo.svg",
+  );
+});
+
+test("hero turn scheduler chooses one tile or a diagonal pair, never adjacent tiles", () => {
+  const sequence = (...values: number[]) => () => values.shift()!;
+  expect(chooseHeroTurnTargets(sequence(0, 0))).toEqual([0]);
+  expect(chooseHeroTurnTargets(sequence(0.49, 0.49))).toEqual([1]);
+  expect(chooseHeroTurnTargets(sequence(0.5, 0))).toEqual([0, 3]);
+  expect(chooseHeroTurnTargets(sequence(0.99, 0.99))).toEqual([1, 2]);
+});
+
+test("hero motion pause control exposes an immediate paused state", () => {
+  render(<App />);
+  const pause = screen.getByRole("button", { name: "Pause tile motion" });
+  fireEvent.click(pause);
+  expect(screen.getByRole("button", { name: "Play tile motion" })).toHaveAttribute("aria-pressed", "true");
+  expect(document.querySelector(".hero-tiles-wrap")).toHaveAttribute("data-paused", "true");
+});
+
+test("entry screen uses the approved original logo and exact orange workflow role map", () => {
+  render(<App />);
+  expect(screen.getByRole("img", { name: "Repeatfield" })).toHaveAttribute(
+    "src",
+    expect.stringContaining("repeatfield-tile-logo.svg"),
+  );
+  const tileSet = screen.getByTestId("workflow-diagram-tile-set");
+  expect(Array.from(tileSet.querySelectorAll("rect")).map((rect) => rect.getAttribute("fill"))).toEqual([
+    "#FFC7A1", "#FFC7A1", "#FF8C17",
+    "#FFD4A8", "#FFD4A8", "#FFC7A1",
+    "#FFD4A8", "#FFD4A8", "#FFC7A1",
+  ]);
+  expect(screen.getByTestId("workflow-diagram-field-tile").querySelectorAll('rect[fill="#FFD4A8"]')).toHaveLength(9);
+  const tessellate = screen.getByTestId("workflow-diagram-tessellate");
+  expect(tessellate.querySelectorAll("path")).toHaveLength(1);
+  expect(tessellate.querySelector("path")).toHaveAttribute("fill", "#FF8C17");
+});
+
 test("the entry screen asks what you are making with exactly three choices", () => {
   render(<App />);
   expect(
     screen.getByRole("heading", { name: /what are you making/i }),
   ).toBeInTheDocument();
-  const cards = screen.getAllByRole("button");
+  const cards = document.querySelectorAll(".workflow-card");
   expect(cards).toHaveLength(3);
   expect(screen.getByText("Field Tile")).toBeInTheDocument();
   expect(screen.getByText("Tile Set")).toBeInTheDocument();
@@ -192,6 +232,24 @@ test("clicking the active tool opens its options; Escape closes them", () => {
   // command tools execute without opening options
   fireEvent.click(screen.getByRole("button", { name: "Rotate 90°" }));
   expect(screen.queryByTestId("tool-options")).not.toBeInTheDocument();
+});
+
+test("tile turn exposes accessible per-cell reflection and reset controls", () => {
+  render(<App />);
+  fireEvent.click(screen.getByText("Field Tile"));
+  fireEvent.click(screen.getByRole("tab", { name: "Repeat" }));
+  const cell = screen.getByRole("button", {
+    name: /Top left tile — 0° — not reflected horizontally — not reflected vertically/,
+  });
+  expect(cell).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Reflect Top left horizontally" }));
+  expect(screen.getByRole("button", {
+    name: /Top left tile — 0° — reflected horizontally — not reflected vertically/,
+  })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Reset Top left transform" }));
+  expect(screen.getByRole("button", {
+    name: /Top left tile — 0° — not reflected horizontally — not reflected vertically/,
+  })).toBeInTheDocument();
 });
 
 test("tile turn rotates a single cell and updates its angle label", () => {

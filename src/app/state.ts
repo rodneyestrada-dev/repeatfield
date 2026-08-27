@@ -7,10 +7,12 @@ import {
 } from "../engine/geometry";
 import {
   DEFAULT_METATILE,
+  normalizeMetatile,
+  reflectCell,
   rotateCell,
   rotateMetatile,
+  type CellTransform,
   type MetatileState,
-  type QuarterTurn,
 } from "../engine/metatile";
 import { DEFAULT_LOOK, type SetLook } from "../engine/appearance";
 import type {
@@ -314,7 +316,10 @@ export function createProject(workflow: WorkflowKind): PatternProject {
       sourceAsset: { ...DEMO_ASSET },
       stage: "crop",
       crop: defaultCropState(),
-      composition: { ...DEFAULT_FIELD_COMPOSITION },
+      composition: {
+        ...DEFAULT_FIELD_COMPOSITION,
+        metatile: normalizeMetatile(DEFAULT_FIELD_COMPOSITION.metatile),
+      },
       history: { past: [], future: [] },
     };
   if (workflow === "tile-set")
@@ -394,6 +399,18 @@ export function deserializeProject(raw: string | null): PatternProject | null {
     // only durable references: never claim Ready or substitute demo pixels.
     if (project.workflow === "field-tile") {
       if (!("sourceAsset" in project)) project.sourceAsset = null;
+      project.composition.metatile = normalizeMetatile(project.composition.metatile);
+      project.history ??= { past: [], future: [] };
+      const past = Array.isArray(project.history.past) ? project.history.past : [];
+      const future = Array.isArray(project.history.future) ? project.history.future : [];
+      project.history.past = past.map((composition: FieldComposition) => ({
+        ...composition,
+        metatile: normalizeMetatile(composition?.metatile),
+      }));
+      project.history.future = future.map((composition: FieldComposition) => ({
+        ...composition,
+        metatile: normalizeMetatile(composition?.metatile),
+      }));
     } else if (project.workflow === "tile-set") {
       for (const role of ["field", "border", "corner"] as const) {
         project.roles[role].asset ??= null;
@@ -445,10 +462,12 @@ export type Action =
       value: FieldComposition[keyof FieldComposition];
     }
   | { type: "rotate-metatile-cell"; index: number; delta: 1 | -1 }
+  | { type: "reflect-metatile-cell"; index: number; axis: "x" | "y" }
+  | { type: "reset-metatile-cell"; index: number }
   | { type: "rotate-metatile-block"; delta: 1 | -1 }
   | {
       type: "apply-metatile-preset";
-      cells: readonly [QuarterTurn, QuarterTurn, QuarterTurn, QuarterTurn];
+      cells: MetatileState["cells"];
     }
   | { type: "reset-field-comp" }
   | { type: "set-active-role"; role: TileRole }
@@ -776,14 +795,21 @@ export function appReducer(state: AppState, action: Action): AppState {
         if (Object.is(project.composition[action.key], value)) return state;
         return withComposition({ ...project.composition, [action.key]: value });
       }
-      case "rotate-metatile-cell": {
-        const cells = [...project.composition.metatile.cells] as [
-          QuarterTurn,
-          QuarterTurn,
-          QuarterTurn,
-          QuarterTurn,
+      case "rotate-metatile-cell":
+      case "reflect-metatile-cell":
+      case "reset-metatile-cell": {
+        if (action.index < 0 || action.index >= 4) return state;
+        const cells = [...project.composition.metatile.cells] as unknown as [
+          CellTransform,
+          CellTransform,
+          CellTransform,
+          CellTransform,
         ];
-        cells[action.index] = rotateCell(cells[action.index], action.delta);
+        cells[action.index] = action.type === "rotate-metatile-cell"
+          ? rotateCell(cells[action.index], action.delta)
+          : action.type === "reflect-metatile-cell"
+            ? reflectCell(cells[action.index], action.axis)
+            : { rotation: 0, flipX: false, flipY: false };
         return withComposition({
           ...project.composition,
           metatile: { size: 2, cells },
@@ -797,7 +823,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       case "apply-metatile-preset":
         return withComposition({
           ...project.composition,
-          metatile: { size: 2, cells: [...action.cells] as never },
+          metatile: normalizeMetatile({ size: 2, cells: action.cells }),
         });
       case "reset-field-comp":
         return withComposition({ ...DEFAULT_FIELD_COMPOSITION });
