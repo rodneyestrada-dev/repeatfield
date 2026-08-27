@@ -4,3 +4,4 @@ test-results/
 playwright-report/
 *.tsbuildinfo
 artifacts/
+public-release/
