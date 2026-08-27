@@ -2,7 +2,7 @@ import type { Quad } from "./geometry";
 import { mapUnitSquareToQuad } from "./geometry";
 import { applyAlphaMask, hexToRgb } from "./background";
 import type { MetatileState } from "./metatile";
-import { computeFrameLayout, type TileRole } from "./frameLayout";
+import { computeFrameLayout, edgePhaseFraction, type TileRole } from "./frameLayout";
 import { applyLook, isDefaultLook, type SetLook } from "./appearance";
 import type {
   CropState,
@@ -10,8 +10,8 @@ import type {
   TessellateComposition,
   TileSetComposition,
 } from "../app/state";
-import { latticeOffsets, type ShapeInstance } from "./tessellation";
-import { analyzeCoverage, type CoverageResult } from "./coverage";
+import type { ShapeInstance } from "./tessellation";
+import { analyzeParallelogramCoverage, type CoverageResult, type StampMask } from "./coverage";
 
 type SizedSource = CanvasImageSource & { width: number; height: number };
 type P = { x: number; y: number };
@@ -359,11 +359,6 @@ export interface RoleTiles {
   corner: HTMLCanvasElement | null;
 }
 
-const ROLE_PLACEHOLDERS: Record<TileRole, string> = {
-  field: "#d9d2e5",
-  border: "#cbc0dd",
-  corner: "#b9aad1",
-};
 
 export function lookedTile(
   tile: HTMLCanvasElement,
@@ -428,6 +423,7 @@ export function renderTileSetComposition(
   };
 
   for (const placement of placements) {
+    if (composition.viewMode !== "set" && placement.role !== composition.viewMode) continue;
     const column = placement.x / 100;
     const row = placement.y / 100;
     const x = originX + grout + column * (cell + grout);
@@ -436,10 +432,15 @@ export function renderTileSetComposition(
     ctx.save();
     ctx.translate(x + cell / 2, y + cell / 2);
     ctx.rotate((placement.rotation * Math.PI) / 180);
-    if (tile) ctx.drawImage(tile, -cell / 2, -cell / 2, cell, cell);
-    else {
-      ctx.fillStyle = ROLE_PLACEHOLDERS[placement.role];
-      ctx.fillRect(-cell / 2, -cell / 2, cell, cell);
+    if (tile) {
+      if (placement.role === "border") {
+        const phase = edgePhaseFraction(composition.borderPhase) * cell;
+        ctx.beginPath();
+        ctx.rect(-cell / 2, -cell / 2, cell, cell);
+        ctx.clip();
+        ctx.drawImage(tile, -cell / 2 + phase, -cell / 2, cell, cell);
+        if (phase) ctx.drawImage(tile, -cell / 2 + phase - cell, -cell / 2, cell, cell);
+      } else ctx.drawImage(tile, -cell / 2, -cell / 2, cell, cell);
     }
     ctx.restore();
   }
@@ -455,14 +456,38 @@ export interface ShapeSources {
   infill: HTMLCanvasElement | null;
 }
 
-function drawInstance(
-  ctx: CanvasRenderingContext2D,
-  source: HTMLCanvasElement,
-  instance: ShapeInstance,
-  offsetX: number,
-  offsetY: number,
-  alpha = 1,
-) {
+const insetCache = new WeakMap<HTMLCanvasElement, Map<number, HTMLCanvasElement>>();
+
+/** Binary alpha erosion: each edge retreats half the requested grout width. */
+function insetAlpha(source: HTMLCanvasElement, radius: number) {
+  const r = Math.max(0, Math.round(radius));
+  if (!r) return source;
+  let byRadius = insetCache.get(source);
+  if (!byRadius) insetCache.set(source, (byRadius = new Map()));
+  const cached = byRadius.get(r);
+  if (cached) return cached;
+  const result = canvas(source.width, source.height);
+  const ctx = result.getContext("2d", { willReadFrequently: true })!;
+  ctx.drawImage(source, 0, 0);
+  const image = ctx.getImageData(0, 0, result.width, result.height);
+  const original = new Uint8ClampedArray(image.data);
+  for (let y = 0; y < result.height; y++)
+    for (let x = 0; x < result.width; x++) {
+      let keep = true;
+      for (let yy = y - r; keep && yy <= y + r; yy++)
+        for (let xx = x - r; xx <= x + r; xx++)
+          if (xx < 0 || yy < 0 || xx >= result.width || yy >= result.height || original[(yy * result.width + xx) * 4 + 3] < 96) {
+            keep = false;
+            break;
+          }
+      if (!keep) image.data[(y * result.width + x) * 4 + 3] = 0;
+    }
+  ctx.putImageData(image, 0, 0);
+  byRadius.set(r, result);
+  return result;
+}
+
+function drawInstance(ctx: CanvasRenderingContext2D, source: HTMLCanvasElement, instance: ShapeInstance, offsetX: number, offsetY: number, alpha = 1) {
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.translate(instance.position.x + offsetX, instance.position.y + offsetY);
@@ -472,43 +497,52 @@ function drawInstance(
   ctx.restore();
 }
 
-export function renderTessellation(
-  ctx: CanvasRenderingContext2D,
-  shapes: ShapeSources,
-  composition: TessellateComposition,
-  width: number,
-  height: number,
-  options: { ghostCells?: boolean; export?: boolean } = {},
-) {
+function latticeRange(width: number, height: number, composition: TessellateComposition, shapes: ShapeSources) {
+  const { u, v } = composition.lattice;
+  const det = u.x * v.y - u.y * v.x;
+  if (Math.abs(det) < 1e-8) return null;
+  let pad = 0;
+  for (const instance of composition.instances) {
+    const source = instance.shapeId === "infill" ? shapes.infill : shapes.primary;
+    if (source) pad = Math.max(pad, Math.hypot(source.width, source.height) / 2 + Math.max(Math.abs(instance.position.x), Math.abs(instance.position.y)));
+  }
+  const toLattice = (x: number, y: number) => ({ i: (x * v.y - y * v.x) / det, j: (u.x * y - u.y * x) / det });
+  const corners = [toLattice(-pad, -pad), toLattice(width + pad, -pad), toLattice(-pad, height + pad), toLattice(width + pad, height + pad)];
+  return {
+    minI: Math.floor(Math.min(...corners.map((p) => p.i))) - 1,
+    maxI: Math.ceil(Math.max(...corners.map((p) => p.i))) + 1,
+    minJ: Math.floor(Math.min(...corners.map((p) => p.j))) - 1,
+    maxJ: Math.ceil(Math.max(...corners.map((p) => p.j))) + 1,
+  };
+}
+
+export function renderTessellation(ctx: CanvasRenderingContext2D, shapes: ShapeSources, composition: TessellateComposition, width: number, height: number, options: { ghostCells?: boolean; export?: boolean } = {}) {
   ctx.save();
   ctx.clearRect(0, 0, width, height);
   const { u, v } = composition.lattice;
   const isField = composition.outputMode === "field";
-  const offsets =
-    isField || options.ghostCells
-      ? latticeOffsets(u, v, 1)
-      : [{ x: 0, y: 0 }];
-  const source = (shapeId: string) =>
-    shapeId === "infill" ? shapes.infill : shapes.primary;
+  const offsets: P[] = [];
+  const range = isField ? latticeRange(width, height, composition, shapes) : null;
+  if (range) {
+    for (let j = range.minJ; j <= range.maxJ; j++)
+      for (let i = range.minI; i <= range.maxI; i++) offsets.push({ x: i * u.x + j * v.x, y: i * u.y + j * v.y });
+  } else if (options.ghostCells) {
+    for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) offsets.push({ x: i * u.x + j * v.x, y: i * u.y + j * v.y });
+  } else offsets.push({ x: 0, y: 0 });
   for (const offset of offsets) {
     const isCenter = offset.x === 0 && offset.y === 0;
     const alpha = isCenter || isField || options.export ? 1 : 0.35;
     if (!isField && !isCenter && !options.ghostCells) continue;
     if (!isField && !isCenter && options.export) continue;
     for (const instance of composition.instances) {
-      const image = source(instance.shapeId);
-      if (image) drawInstance(ctx, image, instance, offset.x, offset.y, alpha);
+      const image = instance.shapeId === "infill" ? shapes.infill : shapes.primary;
+      if (image) drawInstance(ctx, composition.groutMode === "grout" ? insetAlpha(image, composition.groutWidth / 2) : image, instance, offset.x, offset.y, alpha);
     }
   }
   ctx.restore();
 }
 
-export function drawRepeatCellBoundary(
-  ctx: CanvasRenderingContext2D,
-  composition: TessellateComposition,
-  originX: number,
-  originY: number,
-) {
+export function drawRepeatCellBoundary(ctx: CanvasRenderingContext2D, composition: TessellateComposition, originX: number, originY: number) {
   const { u, v } = composition.lattice;
   ctx.save();
   ctx.setLineDash([6, 5]);
@@ -524,84 +558,57 @@ export function drawRepeatCellBoundary(
   ctx.restore();
 }
 
-/** Rasterize instance alpha into stamp masks and run coverage analysis. */
-export function tessellationCoverage(
-  shapes: ShapeSources,
-  composition: TessellateComposition,
-  scale = 0.5,
-): CoverageResult | null {
-  const { u, v } = composition.lattice;
-  const cellWidth = Math.max(4, Math.round(Math.abs(u.x + v.x) * scale));
-  const cellHeight = Math.max(4, Math.round(Math.abs(u.y + v.y) * scale));
-  if (!composition.instances.length) return null;
-  const stamps = [];
-  for (const instance of composition.instances) {
-    const image =
-      instance.shapeId === "infill" ? shapes.infill : shapes.primary;
-    if (!image) continue;
-    const diagonal = Math.ceil(Math.hypot(image.width, image.height) * scale);
-    const stampCanvas = canvas(diagonal, diagonal);
-    const stampCtx = stampCanvas.getContext("2d", {
-      willReadFrequently: true,
-    })!;
-    stampCtx.translate(diagonal / 2, diagonal / 2);
-    stampCtx.rotate((instance.rotation * Math.PI) / 180);
-    if (instance.reflected) stampCtx.scale(-1, 1);
-    stampCtx.drawImage(
-      image,
-      (-image.width * scale) / 2,
-      (-image.height * scale) / 2,
-      image.width * scale,
-      image.height * scale,
-    );
-    const pixels = stampCtx.getImageData(0, 0, diagonal, diagonal).data;
-    const mask = new Uint8Array(diagonal * diagonal);
-    for (let index = 0; index < mask.length; index++)
-      mask[index] = pixels[index * 4 + 3] > 96 ? 1 : 0;
-    stamps.push({
-      data: mask,
-      width: diagonal,
-      height: diagonal,
-      offsetX: Math.round(instance.position.x * scale - diagonal / 2),
-      offsetY: Math.round(instance.position.y * scale - diagonal / 2),
-    });
-  }
-  if (!stamps.length) return null;
-  return analyzeCoverage(
-    cellWidth,
-    cellHeight,
-    stamps,
-    { x: u.x * scale, y: u.y * scale },
-    { x: v.x * scale, y: v.y * scale },
-  );
+function rasterStamp(source: HTMLCanvasElement, instance: ShapeInstance, scale: number): StampMask {
+  const diagonal = Math.max(2, Math.ceil(Math.hypot(source.width, source.height) * scale) + 2);
+  const stampCanvas = canvas(diagonal, diagonal);
+  const stampCtx = stampCanvas.getContext("2d", { willReadFrequently: true })!;
+  stampCtx.translate(diagonal / 2, diagonal / 2);
+  stampCtx.rotate((instance.rotation * Math.PI) / 180);
+  if (instance.reflected) stampCtx.scale(-1, 1);
+  stampCtx.drawImage(source, (-source.width * scale) / 2, (-source.height * scale) / 2, source.width * scale, source.height * scale);
+  const pixels = stampCtx.getImageData(0, 0, diagonal, diagonal).data;
+  const mask = new Uint8Array(diagonal * diagonal);
+  for (let index = 0; index < mask.length; index++) mask[index] = pixels[index * 4 + 3] > 96 ? 1 : 0;
+  return { data: mask, width: diagonal, height: diagonal, offsetX: instance.position.x * scale - diagonal / 2, offsetY: instance.position.y * scale - diagonal / 2 };
 }
 
-export function renderCoverageHeatmap(
-  ctx: CanvasRenderingContext2D,
-  result: CoverageResult,
-  width: number,
-  height: number,
-) {
+export function tessellationCoverage(shapes: ShapeSources, composition: TessellateComposition, scale = 0.5): CoverageResult | null {
+  const { u, v } = composition.lattice;
+  const cellWidth = Math.max(8, Math.min(256, Math.round(Math.hypot(u.x, u.y) * scale)));
+  const cellHeight = Math.max(8, Math.min(256, Math.round(Math.hypot(v.x, v.y) * scale)));
+  if (!composition.instances.length) return null;
+  const stamps: StampMask[] = [];
+  const rawStamps: StampMask[] = [];
+  for (const instance of composition.instances) {
+    const image = instance.shapeId === "infill" ? shapes.infill : shapes.primary;
+    if (!image) continue;
+    rawStamps.push(rasterStamp(image, instance, scale));
+    stamps.push(rasterStamp(composition.groutMode === "grout" ? insetAlpha(image, composition.groutWidth / 2) : image, instance, scale));
+  }
+  if (!stamps.length) return null;
+  return analyzeParallelogramCoverage(cellWidth, cellHeight, stamps, { x: u.x * scale, y: u.y * scale }, { x: v.x * scale, y: v.y * scale }, composition.groutMode === "grout" ? rawStamps : stamps);
+}
+
+export function renderCoverageHeatmap(ctx: CanvasRenderingContext2D, result: CoverageResult, u: P, v: P) {
   const image = ctx.createImageData(result.cellWidth, result.cellHeight);
   for (let index = 0; index < result.counts.length; index++) {
     const count = result.counts[index];
     const offset = index * 4;
     if (count === 0) {
-      image.data[offset] = 225;
-      image.data[offset + 1] = 60;
-      image.data[offset + 2] = 60;
-      image.data[offset + 3] = 190;
+      image.data[offset] = 225; image.data[offset + 1] = 60; image.data[offset + 2] = 60; image.data[offset + 3] = 190;
+    } else if (count === 254) {
+      image.data[offset] = 225; image.data[offset + 1] = 225; image.data[offset + 2] = 235; image.data[offset + 3] = 135;
     } else if (count >= 2) {
-      image.data[offset] = 220;
-      image.data[offset + 1] = 60;
-      image.data[offset + 2] = 220;
-      image.data[offset + 3] = 190;
+      image.data[offset] = 220; image.data[offset + 1] = 60; image.data[offset + 2] = 220; image.data[offset + 3] = 190;
     }
   }
   const buffer = canvas(result.cellWidth, result.cellHeight);
   buffer.getContext("2d")!.putImageData(image, 0, 0);
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(buffer, 0, 0, width, height);
+  ctx.save();
+  ctx.transform(u.x / result.cellWidth, u.y / result.cellWidth, v.x / result.cellHeight, v.y / result.cellHeight, 0, 0);
+  ctx.drawImage(buffer, 0, 0);
+  ctx.restore();
 }
 
 // ---------------------------------------------------------------------------

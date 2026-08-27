@@ -19,9 +19,12 @@
     "@playwright/test": "latest",
     "@testing-library/jest-dom": "latest",
     "@testing-library/react": "latest",
+    "@types/pngjs": "^6.0.5",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.0.1",
+    "pngjs": "^7.0.0",
     "typescript": "latest",
     "vite": "latest",
     "vitest": "latest"

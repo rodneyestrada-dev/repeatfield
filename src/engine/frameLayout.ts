@@ -49,6 +49,9 @@ const CORNER_TURNS: Record<FrameCorner, number> = {
   "bottom-left": 3,
 };
 
+/** Edge phase is a wrapped translation through one tile period. */
+export const edgePhaseFraction = (phase: number) => (((phase % 4) + 4) % 4) / 4;
+
 export function computeFrameLayout(input: FrameLayoutInput): TilePlacement[] {
   const {
     fieldColumns,

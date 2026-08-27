@@ -109,6 +109,28 @@ test("back to workflows returns to the entry screen and clears the stored projec
   expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
 });
 
+test("untouched fresh project exits immediately without confirmation", () => {
+  render(<App />);
+  fireEvent.click(screen.getByText("Field Tile"));
+  fireEvent.click(screen.getByRole("button", { name: /Workflows/ }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: /what are you making/i })).toBeVisible();
+});
+
+test("meaningful edits require custom exit confirmation and cancel preserves the project", () => {
+  render(<App />);
+  fireEvent.click(screen.getByText("Field Tile"));
+  fireEvent.click(screen.getByRole("tab", { name: "Repeat" }));
+  fireEvent.change(screen.getByRole("slider", { name: "Gap" }), { target: { value: "18" } });
+  fireEvent.click(screen.getByRole("button", { name: /Workflows/ }));
+  expect(screen.getByRole("dialog", { name: /leave this project/i })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: /keep editing/i }));
+  expect(screen.getByRole("slider", { name: "Gap" })).toHaveValue("18");
+  fireEvent.click(screen.getByRole("button", { name: /Workflows/ }));
+  fireEvent.click(screen.getByRole("button", { name: /leave project/i }));
+  expect(screen.getByRole("heading", { name: /what are you making/i })).toBeVisible();
+});
+
 test("Field Tile repeat exposes undo/redo controls that track edits", () => {
   render(<App />);
   fireEvent.click(screen.getByText("Field Tile"));

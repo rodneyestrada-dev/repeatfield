@@ -6,9 +6,13 @@ import {
   INITIAL_STATE,
   STORAGE_KEY,
   WORKFLOW_NAMES,
+  isProjectDirty,
+  type BrowserAssetRef,
+  type PatternProject,
   type WorkflowKind,
 } from "./state";
-import { useImage, acceptUpload } from "./common";
+import { useImage } from "./common";
+import { loadAsset, saveAsset } from "./assetStore";
 import { FieldTileEditor } from "./FieldTileEditor";
 import { TileSetEditor } from "./TileSetEditor";
 import { TessellateEditor } from "./TessellateEditor";
@@ -19,6 +23,56 @@ export function demoImageUrl(base: string) {
 }
 
 const DEMO = demoImageUrl(import.meta.env.BASE_URL);
+
+type AssetUrls = Record<string, string | null>;
+
+function projectAssetEntries(project: PatternProject | null): [string, BrowserAssetRef][] {
+  if (!project) return [];
+  if (project.workflow === "field-tile")
+    return project.sourceAsset ? [["field", project.sourceAsset]] : [];
+  if (project.workflow === "tile-set")
+    return (["field", "border", "corner"] as const).flatMap((role) =>
+      project.roles[role].asset ? [[role, project.roles[role].asset] as [string, BrowserAssetRef]] : [],
+    );
+  return (["primary", "infill"] as const).flatMap((shape) =>
+    project.shapes[shape].asset ? [[shape, project.shapes[shape].asset] as [string, BrowserAssetRef]] : [],
+  );
+}
+
+function useProjectAssetUrls(project: PatternProject | null) {
+  const [urls, setUrls] = useState<AssetUrls>({});
+  const signature = JSON.stringify(projectAssetEntries(project));
+  useEffect(() => {
+    let active = true;
+    const objectUrls: string[] = [];
+    setUrls({});
+    void (async () => {
+      if (!project) return;
+      const next: AssetUrls = {};
+      for (const [slot, ref] of projectAssetEntries(project)) {
+        if (ref.kind === "demo") next[slot] = DEMO;
+        else {
+          const blob = await loadAsset(project.id, ref);
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            if (!active) {
+              URL.revokeObjectURL(url);
+              continue;
+            }
+            objectUrls.push(url);
+            next[slot] = url;
+          } else next[slot] = null;
+        }
+      }
+      if (active) setUrls(next);
+    })();
+    return () => {
+      active = false;
+      for (const url of objectUrls) URL.revokeObjectURL(url);
+    };
+  }, [project?.id, signature]);
+  return urls;
+}
 
 function WorkflowDiagram({ kind }: { kind: WorkflowKind }) {
   if (kind === "field-tile")
@@ -161,9 +215,12 @@ export function App() {
     },
   );
   const project = state.project;
-  const [src, setSrc] = useState<string | null>(DEMO);
-  const [fileName, setFileName] = useState("Demo tile");
-  const img = useImage(project?.workflow === "field-tile" ? src : null);
+  const [exitPrompt, setExitPrompt] = useState(false);
+  const assetUrls = useProjectAssetUrls(project);
+  const fieldSrc = project?.workflow === "field-tile" && project.sourceAsset?.kind === "demo"
+    ? DEMO
+    : assetUrls.field ?? null;
+  const img = useImage(project?.workflow === "field-tile" ? fieldSrc : null);
 
   useEffect(() => {
     try {
@@ -238,7 +295,8 @@ export function App() {
         <button
           className="back-to-workflows"
           onClick={() => {
-            dispatch({ type: "close-project" });
+            if (isProjectDirty(project)) setExitPrompt(true);
+            else dispatch({ type: "close-project" });
           }}
         >
           ← Workflows
@@ -248,28 +306,47 @@ export function App() {
     </header>
   );
 
+  const exitDialog = exitPrompt ? (
+    <div className="modal-backdrop">
+      <div role="dialog" aria-modal="true" aria-labelledby="leave-project-title" className="confirm-dialog">
+        <h2 id="leave-project-title">Leave this project?</h2>
+        <p>Your edits are saved locally, but leaving closes this working project.</p>
+        <div className="dialog-actions">
+          <button onClick={() => setExitPrompt(false)}>Keep editing</button>
+          <button className="primary" onClick={() => {
+            setExitPrompt(false);
+            dispatch({ type: "close-project" });
+          }}>Leave project</button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   if (project.workflow === "field-tile") {
     const filebar = (
       <div className="filebar">
         <div>
           <span
             className="file-thumb"
-            style={{ backgroundImage: src ? `url(${src})` : undefined }}
+            style={{ backgroundImage: fieldSrc ? `url(${fieldSrc})` : undefined }}
           />
-          <strong>{fileName}</strong>
+          <strong>{project.sourceAsset?.name ?? "Asset unavailable"}</strong>
           <small>
             {img ? `${img.naturalWidth} × ${img.naturalHeight}` : "Loading…"}
           </small>
         </div>
         <label className="button">
-          {fileName === "Demo tile" ? "Upload image" : "Replace image"}
+          {project.sourceAsset?.kind === "demo" ? "Upload image" : "Replace image"}
           <input
             aria-label="Upload image"
             type="file"
             accept="image/png,image/jpeg,image/webp"
-            onChange={(e) =>
-              acceptUpload(e.target.files?.[0], setSrc, setFileName)
-            }
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file || !["image/png", "image/jpeg", "image/webp"].includes(file.type) || !file.size) return;
+              const asset = await saveAsset(project.id, file);
+              dispatch({ type: "set-field-asset", asset });
+            }}
           />
         </label>
         <span>Your image never leaves this browser.</span>
@@ -278,6 +355,7 @@ export function App() {
     return (
       <div className="app-shell">
         {header}
+        {exitDialog}
         <FieldTileEditor
           img={img}
           project={project}
@@ -292,14 +370,32 @@ export function App() {
     return (
       <div className="app-shell">
         {header}
-        <TileSetEditor project={project} dispatch={dispatch} />
+        {exitDialog}
+        <TileSetEditor
+          project={project}
+          dispatch={dispatch}
+          sources={{ field: assetUrls.field, border: assetUrls.border, corner: assetUrls.corner }}
+          onUpload={async (role, file) => {
+            const asset = await saveAsset(project.id, file);
+            dispatch({ type: "set-role-asset", role, asset });
+          }}
+        />
       </div>
     );
 
   return (
     <div className="app-shell">
       {header}
-      <TessellateEditor project={project} dispatch={dispatch} />
+      {exitDialog}
+      <TessellateEditor
+        project={project}
+        dispatch={dispatch}
+        sources={{ primary: assetUrls.primary, infill: assetUrls.infill }}
+        onUpload={async (shape, file) => {
+          const asset = await saveAsset(project.id, file);
+          dispatch({ type: "set-shape-asset", shape, asset });
+        }}
+      />
     </div>
   );
 }

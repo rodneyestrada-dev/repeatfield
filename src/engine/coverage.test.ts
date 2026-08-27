@@ -1,4 +1,4 @@
-import { analyzeCoverage, coverageStatus, type StampMask } from "./coverage";
+import { analyzeCoverage, analyzeParallelogramCoverage, coverageStatus, type StampMask } from "./coverage";
 
 function rectStamp(
   width: number,
@@ -69,6 +69,31 @@ test("neighboring cells contribute coverage across the cell boundary", () => {
   const result = analyzeCoverage(10, 10, [stamp], { x: 10, y: 0 }, { x: 0, y: 10 });
   expect(result.gapPct).toBe(0);
   expect(result.validPct).toBe(100);
+});
+
+test("a contributor more than one cell away is included automatically", () => {
+  const result = analyzeCoverage(10, 10, [rectStamp(10, 10, 35, 0)], { x: 10, y: 0 }, { x: 0, y: 10 });
+  expect(result.validPct).toBe(100);
+  expect(result.gapPct).toBe(0);
+});
+
+test("coverage samples a rotated parallelogram in canonical lattice space", () => {
+  const result = analyzeParallelogramCoverage(
+    20, 20, [rectStamp(10, 10, -6, 0)], { x: 8, y: 6 }, { x: -6, y: 8 },
+  );
+  expect(result.cellWidth).toBe(20);
+  expect(result.cellHeight).toBe(20);
+  expect(result.gapPct + result.validPct + result.overlapPct + result.groutPct).toBeCloseTo(100);
+  expect(result.cellWidth).not.toBe(4);
+});
+
+test("intentional grout is classified separately rather than as an accidental gap", () => {
+  const result = analyzeParallelogramCoverage(
+    10, 10, [rectStamp(8, 8, 1, 1)], { x: 10, y: 0 }, { x: 0, y: 10 }, [rectStamp(10, 10)],
+  );
+  expect(result.gapPct).toBe(0);
+  expect(result.groutPct).toBeGreaterThan(0);
+  expect(coverageStatus(result)).toBe("Gap-free");
 });
 
 test("status labels stay honest for gap, overlap, and decorative cases", () => {

@@ -9,7 +9,7 @@ import {
 import { extractContours } from "../engine/contours";
 import { coverageStatus } from "../engine/coverage";
 import { applyAlphaMask, hexToRgb, rgbToHex } from "../engine/background";
-import { Range, downloadCanvas, useImage, acceptUpload } from "./common";
+import { Range, downloadCanvas, useImage } from "./common";
 import { exportFilename, validateExport } from "../engine/export";
 
 const SHAPE_LABELS: Record<ShapeRole, string> = {
@@ -51,27 +51,25 @@ const nextId = () => `shape-${++instanceCounter}`;
 export function TessellateEditor({
   project,
   dispatch,
+  sources,
+  onUpload,
 }: {
   project: TessellateProject;
   dispatch: (action: Action) => void;
+  sources: Record<ShapeRole, string | null | undefined>;
+  onUpload: (shape: ShapeRole, file: File) => Promise<void>;
 }) {
-  const [sources, setSources] = useState<Record<ShapeRole, string | null>>({
-    primary: null,
-    infill: null,
-  });
-  const primaryImg = useImage(sources.primary);
-  const infillImg = useImage(sources.infill);
+  const primaryImg = useImage(sources.primary ?? null);
+  const infillImg = useImage(sources.infill ?? null);
   const primaryCanvas = useShapeCanvas(primaryImg, project.shapes.primary);
   const infillCanvas = useShapeCanvas(infillImg, project.shapes.infill);
   const shapeSources = { primary: primaryCanvas, infill: infillCanvas };
   const activeShape = project.activeShape;
 
-  const upload = (shape: ShapeRole) => (file?: File) =>
-    acceptUpload(
-      file,
-      (updater) => setSources((old) => ({ ...old, [shape]: updater(old[shape]) })),
-      () => dispatch({ type: "shape-image", shape, hasImage: true }),
-    );
+  const upload = (shape: ShapeRole) => async (file?: File) => {
+    if (!file || !["image/png", "image/jpeg", "image/webp"].includes(file.type) || !file.size) return;
+    await onUpload(shape, file);
+  };
 
   if (project.stage === "shapes")
     return (
@@ -80,6 +78,7 @@ export function TessellateEditor({
         dispatch={dispatch}
         upload={upload}
         images={{ primary: primaryImg, infill: infillImg }}
+        sources={sources}
         canvases={shapeSources}
         activeShape={activeShape}
       />
@@ -99,6 +98,7 @@ function ShapesStage({
   dispatch,
   upload,
   images,
+  sources,
   canvases,
   activeShape,
 }: {
@@ -106,6 +106,7 @@ function ShapesStage({
   dispatch: (action: Action) => void;
   upload: (shape: ShapeRole) => (file?: File) => void;
   images: Record<ShapeRole, HTMLImageElement | null>;
+  sources: Record<ShapeRole, string | null | undefined>;
   canvases: Record<ShapeRole, HTMLCanvasElement | null>;
   activeShape: ShapeRole;
 }) {
@@ -201,7 +202,8 @@ function ShapesStage({
             >
               <b>{SHAPE_LABELS[shape]}</b>
               <small>
-                {project.shapes[shape].hasImage ? "Ready" : shape === "infill" ? "Optional" : "No image yet"}
+                {sources[shape] ? "Ready" : project.shapes[shape].asset ?
+                  (sources[shape] === undefined ? "Loading…" : "Asset unavailable") : shape === "infill" ? "Optional" : "No image yet"}
               </small>
             </button>
           ))}
@@ -471,8 +473,8 @@ function AssembleStage({
         renderCoverageHeatmap(
           x,
           coverage,
-          Math.abs(composition.lattice.u.x + composition.lattice.v.x),
-          Math.abs(composition.lattice.u.y + composition.lattice.v.y),
+          composition.lattice.u,
+          composition.lattice.v,
         );
         x.restore();
       }

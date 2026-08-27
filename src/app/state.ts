@@ -1,6 +1,8 @@
 import type { Point, Quad } from "../engine/geometry";
 import {
   clampQuadTranslation,
+  homographyFromUnitSquare,
+  isSimpleConvexQuad,
   translateQuad,
 } from "../engine/geometry";
 import {
@@ -32,6 +34,23 @@ export const WORKFLOW_NAMES: Record<WorkflowKind, string> = {
   "field-tile": "Field Tile",
   "tile-set": "Tile Set",
   tessellate: "Tessellate",
+};
+
+export interface BrowserAssetRef {
+  id: string;
+  name: string;
+  type: string;
+  kind: "demo" | "indexeddb";
+}
+
+const newProjectId = () =>
+  globalThis.crypto?.randomUUID?.() ?? `project-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+export const DEMO_ASSET: BrowserAssetRef = {
+  id: "bundled-demo",
+  name: "Demo tile",
+  type: "image/jpeg",
+  kind: "demo",
 };
 
 // ---------------------------------------------------------------------------
@@ -138,7 +157,9 @@ export const DEFAULT_FIELD_COMPOSITION: FieldComposition = {
 export type FieldTileStage = "crop" | "repeat" | "preview";
 
 export interface FieldTileProject {
+  id: string;
   workflow: "field-tile";
+  sourceAsset: BrowserAssetRef | null;
   stage: FieldTileStage;
   crop: CropState;
   composition: FieldComposition;
@@ -185,6 +206,7 @@ export const DEFAULT_TILE_SET_COMPOSITION: TileSetComposition = {
 export interface TileSetRoleState {
   crop: CropState;
   hasImage: boolean;
+  asset: BrowserAssetRef | null;
 }
 
 interface TileSetSnapshot {
@@ -193,6 +215,7 @@ interface TileSetSnapshot {
 }
 
 export interface TileSetProject {
+  id: string;
   workflow: "tile-set";
   stage: TileSetStage;
   activeRole: TileRole;
@@ -211,6 +234,7 @@ export type ShapeRole = "primary" | "infill";
 
 export interface ShapeSlot {
   hasImage: boolean;
+  asset: BrowserAssetRef | null;
   backgroundRemoval: {
     enabled: boolean;
     color: string;
@@ -224,6 +248,7 @@ export interface ShapeSlot {
 export function defaultShapeSlot(): ShapeSlot {
   return {
     hasImage: false,
+    asset: null,
     backgroundRemoval: {
       enabled: false,
       color: "#ffffff",
@@ -256,6 +281,7 @@ export const DEFAULT_TESSELLATE_COMPOSITION: TessellateComposition = {
 };
 
 export interface TessellateProject {
+  id: string;
   workflow: "tessellate";
   stage: TessellateStage;
   activeShape: ShapeRole;
@@ -283,7 +309,9 @@ export const INITIAL_STATE: AppState = { project: null };
 export function createProject(workflow: WorkflowKind): PatternProject {
   if (workflow === "field-tile")
     return {
+      id: newProjectId(),
       workflow,
+      sourceAsset: { ...DEMO_ASSET },
       stage: "crop",
       crop: defaultCropState(),
       composition: { ...DEFAULT_FIELD_COMPOSITION },
@@ -291,19 +319,21 @@ export function createProject(workflow: WorkflowKind): PatternProject {
     };
   if (workflow === "tile-set")
     return {
+      id: newProjectId(),
       workflow,
       stage: "tiles",
       activeRole: "field",
       roles: {
-        field: { crop: defaultCropState(), hasImage: false },
-        border: { crop: defaultCropState(), hasImage: false },
-        corner: { crop: defaultCropState(), hasImage: false },
+        field: { crop: defaultCropState(), hasImage: false, asset: null },
+        border: { crop: defaultCropState(), hasImage: false, asset: null },
+        corner: { crop: defaultCropState(), hasImage: false, asset: null },
       },
       setLook: { ...DEFAULT_LOOK },
       composition: { ...DEFAULT_TILE_SET_COMPOSITION },
       history: { past: [], future: [] },
     };
   return {
+    id: newProjectId(),
     workflow,
     stage: "shapes",
     activeShape: "primary",
@@ -332,7 +362,8 @@ export function validateFieldTile(project: PatternProject): boolean {
   );
 }
 export function validateTileSet(project: PatternProject): boolean {
-  return project.workflow === "tile-set" && project.roles.field.hasImage;
+  return project.workflow === "tile-set" &&
+    (["field", "border", "corner"] as const).every((role) => Boolean(project.roles[role].asset));
 }
 export function validateTessellate(project: PatternProject): boolean {
   return project.workflow === "tessellate" && project.shapes.primary.hasImage;
@@ -358,6 +389,22 @@ export function deserializeProject(raw: string | null): PatternProject | null {
       !["field-tile", "tile-set", "tessellate"].includes(project.workflow)
     )
       return null;
+    if (!project.id) project.id = newProjectId();
+    // Legacy v3 projects persisted optimistic booleans but no bytes. Hydrate
+    // only durable references: never claim Ready or substitute demo pixels.
+    if (project.workflow === "field-tile") {
+      if (!("sourceAsset" in project)) project.sourceAsset = null;
+    } else if (project.workflow === "tile-set") {
+      for (const role of ["field", "border", "corner"] as const) {
+        project.roles[role].asset ??= null;
+        project.roles[role].hasImage = Boolean(project.roles[role].asset);
+      }
+    } else {
+      for (const shape of ["primary", "infill"] as const) {
+        project.shapes[shape].asset ??= null;
+        project.shapes[shape].hasImage = Boolean(project.shapes[shape].asset);
+      }
+    }
     return project as PatternProject;
   } catch {
     return null;
@@ -390,6 +437,7 @@ export type Action =
   | { type: "create-project"; workflow: WorkflowKind }
   | { type: "load-project"; project: PatternProject }
   | { type: "close-project" }
+  | { type: "set-field-asset"; asset: BrowserAssetRef }
   | { type: "set-stage"; stage: string }
   | {
       type: "field-comp";
@@ -405,6 +453,7 @@ export type Action =
   | { type: "reset-field-comp" }
   | { type: "set-active-role"; role: TileRole }
   | { type: "role-image"; role: TileRole; hasImage: boolean }
+  | { type: "set-role-asset"; role: TileRole; asset: BrowserAssetRef }
   | {
       type: "tile-set-comp";
       key: keyof TileSetComposition;
@@ -415,6 +464,7 @@ export type Action =
   | { type: "reset-set-look" }
   | { type: "set-active-shape"; shape: ShapeRole }
   | { type: "shape-image"; shape: ShapeRole; hasImage: boolean }
+  | { type: "set-shape-asset"; shape: ShapeRole; asset: BrowserAssetRef }
   | {
       type: "shape-setting";
       shape: ShapeRole;
@@ -447,6 +497,23 @@ export type Action =
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const HISTORY_LIMIT = 50;
 
+function quadArea(quad: Quad) {
+  return Math.abs(quad.reduce((sum, point, index) => {
+    const next = quad[(index + 1) % 4];
+    return sum + point.x * next.y - next.x * point.y;
+  }, 0) / 2);
+}
+
+export function isValidEditableQuad(quad: Quad) {
+  if (!isSimpleConvexQuad(quad) || quadArea(quad) < 1e-4) return false;
+  const h = homographyFromUnitSquare(quad);
+  const determinant =
+    h[0] * (h[4] * h[8] - h[5] * h[7]) -
+    h[1] * (h[3] * h[8] - h[5] * h[6]) +
+    h[2] * (h[3] * h[7] - h[4] * h[6]);
+  return Number.isFinite(determinant) && Math.abs(determinant) >= 1e-8;
+}
+
 function pushHistory<T>(history: { past: T[]; future: T[] }, snapshot: T) {
   return {
     past: [...history.past, snapshot].slice(-HISTORY_LIMIT),
@@ -467,6 +534,7 @@ function reduceCrop(crop: CropState, action: CropAction): CropState {
         x: clamp01(action.point.x),
         y: clamp01(action.point.y),
       };
+      if (!isValidEditableQuad(selectionQuad)) return crop;
       return { ...crop, selectionQuad };
     }
     case "crop-set-warp-pin": {
@@ -480,6 +548,7 @@ function reduceCrop(crop: CropState, action: CropAction): CropState {
         x: Math.max(-0.5, Math.min(1.5, action.point.x)),
         y: Math.max(-0.5, Math.min(1.5, action.point.y)),
       };
+      if (!isValidEditableQuad(warpQuad)) return crop;
       return { ...crop, warpQuad };
     }
     case "crop-translate-selection": {
@@ -587,6 +656,8 @@ export function appReducer(state: AppState, action: Action): AppState {
         tessellate: ["shapes", "assemble", "verify", "preview"],
       };
       if (!stages[project.workflow].includes(action.stage)) return state;
+      if (project.workflow === "tile-set" && action.stage !== "tiles" && !validateTileSet(project))
+        return state;
       return {
         project: { ...project, stage: action.stage } as PatternProject,
       };
@@ -694,6 +765,8 @@ export function appReducer(state: AppState, action: Action): AppState {
       },
     });
     switch (action.type) {
+      case "set-field-asset":
+        return { project: { ...project, sourceAsset: action.asset } };
       case "field-comp": {
         let value = action.value;
         if (action.key === "sourceZoom")
@@ -750,6 +823,16 @@ export function appReducer(state: AppState, action: Action): AppState {
                 ...project.roles[action.role],
                 hasImage: action.hasImage,
               },
+            },
+          },
+        };
+      case "set-role-asset":
+        return {
+          project: {
+            ...project,
+            roles: {
+              ...project.roles,
+              [action.role]: { ...project.roles[action.role], hasImage: true, asset: action.asset },
             },
           },
         };
@@ -818,6 +901,16 @@ export function appReducer(state: AppState, action: Action): AppState {
               ...project.shapes[action.shape],
               hasImage: action.hasImage,
             },
+          },
+        },
+      };
+    case "set-shape-asset":
+      return {
+        project: {
+          ...project,
+          shapes: {
+            ...project.shapes,
+            [action.shape]: { ...project.shapes[action.shape], hasImage: true, asset: action.asset },
           },
         },
       };
@@ -900,4 +993,24 @@ export function appReducer(state: AppState, action: Action): AppState {
       });
   }
   return state;
+}
+
+const cropMeaningful = (crop: CropState) => {
+  const baseline = defaultCropState();
+  return JSON.stringify({ ...crop, activeTool: baseline.activeTool, openToolOptions: null }) !==
+    JSON.stringify(baseline);
+};
+
+/** Navigation/disclosure is not dirty; pixels, geometry, and output settings are. */
+export function isProjectDirty(project: PatternProject): boolean {
+  if (project.workflow === "field-tile")
+    return project.sourceAsset?.kind === "indexeddb" || cropMeaningful(project.crop) ||
+      JSON.stringify(project.composition) !== JSON.stringify(DEFAULT_FIELD_COMPOSITION);
+  if (project.workflow === "tile-set")
+    return Object.values(project.roles).some((role) => Boolean(role.asset) || cropMeaningful(role.crop)) ||
+      JSON.stringify(project.composition) !== JSON.stringify(DEFAULT_TILE_SET_COMPOSITION) ||
+      JSON.stringify(project.setLook) !== JSON.stringify(DEFAULT_LOOK);
+  return Object.values(project.shapes).some((shape) => Boolean(shape.asset) ||
+      JSON.stringify({ ...shape, asset: null, hasImage: false }) !== JSON.stringify(defaultShapeSlot())) ||
+    JSON.stringify(project.composition) !== JSON.stringify(DEFAULT_TESSELLATE_COMPOSITION);
 }

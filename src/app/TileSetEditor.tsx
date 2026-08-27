@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Action, TileSetProject } from "./state";
 import type { TileRole, FrameCorner, TileRotation } from "../engine/frameLayout";
 import { rectifiedTile, renderTileSetComposition } from "../engine/renderer";
-import { Range, downloadCanvas, useImage, acceptUpload } from "./common";
+import { Range, downloadCanvas, useImage } from "./common";
 import { CropWorkspace } from "./CropWorkspace";
 import { exportFilename, validateExport } from "../engine/export";
 
@@ -16,18 +16,17 @@ const ROLES: TileRole[] = ["field", "border", "corner"];
 export function TileSetEditor({
   project,
   dispatch,
+  sources,
+  onUpload,
 }: {
   project: TileSetProject;
   dispatch: (action: Action) => void;
+  sources: Record<TileRole, string | null | undefined>;
+  onUpload: (role: TileRole, file: File) => Promise<void>;
 }) {
-  const [sources, setSources] = useState<Record<TileRole, string | null>>({
-    field: null,
-    border: null,
-    corner: null,
-  });
-  const fieldImg = useImage(sources.field);
-  const borderImg = useImage(sources.border);
-  const cornerImg = useImage(sources.corner);
+  const fieldImg = useImage(sources.field ?? null);
+  const borderImg = useImage(sources.border ?? null);
+  const cornerImg = useImage(sources.corner ?? null);
   const images: Record<TileRole, HTMLImageElement | null> = {
     field: fieldImg,
     border: borderImg,
@@ -35,6 +34,8 @@ export function TileSetEditor({
   };
   const activeRole = project.activeRole;
   const activeImg = images[activeRole];
+  const missingRoles = ROLES.filter((role) => !sources[role]);
+  const missingLabel = missingRoles.map((role) => ROLE_LABELS[role]).join(", ");
 
   const roleTiles = () => ({
     field: fieldImg
@@ -48,13 +49,10 @@ export function TileSetEditor({
       : null,
   });
 
-  const upload = (role: TileRole) => (file?: File) =>
-    acceptUpload(
-      file,
-      (updater) =>
-        setSources((old) => ({ ...old, [role]: updater(old[role]) })),
-      () => dispatch({ type: "role-image", role, hasImage: true }),
-    );
+  const upload = (role: TileRole) => async (file?: File) => {
+    if (!file || !["image/png", "image/jpeg", "image/webp"].includes(file.type) || !file.size) return;
+    await onUpload(role, file);
+  };
 
   const roleSwitcher = (
     <div className="role-switcher" role="group" aria-label="Tile Set roles">
@@ -67,7 +65,8 @@ export function TileSetEditor({
         >
           <b>{ROLE_LABELS[role]}</b>
           <small>
-            {project.roles[role].hasImage ? "Ready" : "No image yet"}
+            {sources[role] ? "Ready" : project.roles[role].asset ?
+              (sources[role] === undefined ? "Loading…" : "Asset unavailable") : "No image yet"}
           </small>
         </button>
       ))}
@@ -94,6 +93,11 @@ export function TileSetEditor({
           <span>Your images never leave this browser.</span>
         </div>
         <main className="workspace">
+          {missingRoles.length > 0 && (
+            <p className="warning" role="alert" data-testid="missing-roles">
+              Add the required {missingLabel} {missingRoles.length === 1 ? "tile" : "tiles"} before Compose or Export.
+            </p>
+          )}
           {activeImg ? (
             <CropWorkspace
               img={activeImg}
@@ -130,6 +134,7 @@ export function TileSetEditor({
               <div className="crop-action-bar">
                 <button
                   className="primary continue"
+                  disabled={missingRoles.length > 0}
                   onClick={() =>
                     dispatch({ type: "set-stage", stage: "compose" })
                   }
@@ -149,6 +154,7 @@ export function TileSetEditor({
       dispatch={dispatch}
       roleTiles={roleTiles}
       roleSwitcher={roleSwitcher}
+      missingRoles={missingRoles}
     />
   );
 }
@@ -157,6 +163,7 @@ function ComposeStage({
   project,
   dispatch,
   roleTiles,
+  missingRoles,
 }: {
   project: TileSetProject;
   dispatch: (action: Action) => void;
@@ -166,9 +173,11 @@ function ComposeStage({
     corner: HTMLCanvasElement | null;
   };
   roleSwitcher?: React.ReactNode;
+  missingRoles: TileRole[];
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [dims, setDims] = useState({ width: 1080, height: 1080 });
+  const [exportError, setExportError] = useState("");
   const composition = project.composition;
   const setComposition = (
     key: keyof TileSetProject["composition"],
@@ -203,13 +212,18 @@ function ComposeStage({
   }, [project]);
 
   const download = () => {
+    const tiles = roleTiles();
+    if (missingRoles.length || !tiles.field || !tiles.border || !tiles.corner) {
+      setExportError("Field, Edge, and Corner assets are required before export.");
+      return;
+    }
     const valid = validateExport(dims.width, dims.height);
     const canvas = document.createElement("canvas");
     canvas.width = valid.width;
     canvas.height = valid.height;
     renderTileSetComposition(
       canvas.getContext("2d")!,
-      roleTiles(),
+      tiles,
       composition,
       project.setLook,
       valid.width,
@@ -260,6 +274,11 @@ function ComposeStage({
         <div className="field-hint">FULL FRAMED SET PREVIEW</div>
       </section>
       <aside className="inspector">
+        {missingRoles.length > 0 && (
+          <p className="warning" role="alert" data-testid="missing-roles">
+            Missing required: {missingRoles.map((role) => ROLE_LABELS[role]).join(", ")}.
+          </p>
+        )}
         <div className="inspector-head">
           <div>
             <h2>Compose the set</h2>
@@ -448,7 +467,8 @@ function ComposeStage({
               }
             />
           </label>
-          <button className="primary" onClick={download}>
+          {exportError && <p className="warning" role="alert">{exportError}</p>}
+          <button className="primary" disabled={missingRoles.length > 0} onClick={download}>
             Download PNG ↗
           </button>
         </section>

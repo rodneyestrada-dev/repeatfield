@@ -2,6 +2,7 @@ import {
   appReducer,
   createProject,
   deserializeProject,
+  isProjectDirty,
   serializeProject,
   validateFieldTile,
   validateTessellate,
@@ -63,6 +64,20 @@ test("projects round-trip through persistence with the workflow discriminator", 
   expect(deserializeProject('{"project":{"workflow":"bogus"}}')).toBeNull();
 });
 
+test("fresh projects are untouched while geometry and asset edits are meaningful", () => {
+  const fresh = createProject("field-tile");
+  expect(isProjectDirty(fresh)).toBe(false);
+  const edited = appReducer({ project: fresh }, {
+    type: "crop-set-corner", index: 0, point: { x: 0.2, y: 0.2 },
+  }).project!;
+  expect(isProjectDirty(edited)).toBe(true);
+  const uploaded = appReducer({ project: fresh }, {
+    type: "set-field-asset",
+    asset: { id: "asset-a", name: "private.png", type: "image/png", kind: "indexeddb" },
+  }).project!;
+  expect(isProjectDirty(uploaded)).toBe(true);
+});
+
 // ---------------------------------------------------------------------------
 // Crop: selection vs warp separation
 // ---------------------------------------------------------------------------
@@ -86,6 +101,26 @@ test("moving the selection never alters warp state and vice versa", () => {
   crop = (s.project as FieldTileProject).crop;
   expect(crop.warpQuad[2]).toEqual({ x: 0.7, y: 0.9 });
   expect(crop.selectionQuad[0]).toEqual({ x: 0.3, y: 0.3 });
+});
+
+test.each([
+  ["crossed", { x: 0.95, y: 0.95 }],
+  ["near-zero-area", { x: 0.879999, y: 0.120001 }],
+  ["non-convex", { x: 0.5, y: 0.5 }],
+])("crop rejects %s corner edits and preserves the last valid quad", (_name, point) => {
+  const state = fieldTile();
+  const before = (state.project as FieldTileProject).crop.selectionQuad;
+  const next = appReducer(state, { type: "crop-set-corner", index: 0, point });
+  expect((next.project as FieldTileProject).crop.selectionQuad).toEqual(before);
+});
+
+test("warp rejects crossed and singular pin edits and preserves the last valid quad", () => {
+  const state = fieldTile();
+  const before = (state.project as FieldTileProject).crop.warpQuad;
+  for (const point of [{ x: 1.2, y: 1.2 }, { x: 0.999999, y: 0.000001 }]) {
+    const next = appReducer(state, { type: "crop-set-warp-pin", index: 0, point });
+    expect((next.project as FieldTileProject).crop.warpQuad).toEqual(before);
+  }
 });
 
 test("whole-selection translation clamps to bounds as one unit", () => {
@@ -232,21 +267,21 @@ test("role crop edits are independent between Field, Edge, and Corner", () => {
   s = appReducer(s, {
     type: "crop-set-corner",
     index: 0,
-    point: { x: 0.5, y: 0.5 },
+    point: { x: 0.3, y: 0.3 },
   });
   s = appReducer(s, { type: "set-active-role", role: "border" });
   s = appReducer(s, {
     type: "crop-set-corner",
     index: 0,
-    point: { x: 0.6, y: 0.1 },
+    point: { x: 0.22, y: 0.1 },
   });
   const project = s.project as TileSetProject;
   expect(project.roles.field.crop.selectionQuad[0]).toEqual({
-    x: 0.5,
-    y: 0.5,
+    x: 0.3,
+    y: 0.3,
   });
   expect(project.roles.border.crop.selectionQuad[0]).toEqual({
-    x: 0.6,
+    x: 0.22,
     y: 0.1,
   });
   expect(project.roles.corner.crop.selectionQuad[0]).toEqual({

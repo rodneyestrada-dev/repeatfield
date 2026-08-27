@@ -1,4 +1,4 @@
-import { computeFrameLayout } from "./frameLayout";
+import { computeFrameLayout, edgePhaseFraction } from "./frameLayout";
 
 const base = {
   fieldColumns: 2,
@@ -107,4 +107,11 @@ test("reverse adds a half turn to border runs without moving tiles", () => {
     list.filter((p) => p.side === "top").sort((a, b) => a.x - b.x);
   expect(top(reversed).map((p) => p.x)).toEqual(top(normal).map((p) => p.x));
   expect(top(reversed).map((p) => p.rotation)).toEqual([180, 180]);
+});
+
+test("edge phase is a visible run translation even when alternation is off", () => {
+  expect(edgePhaseFraction(0)).toBe(0);
+  expect(edgePhaseFraction(1)).toBeCloseTo(0.25);
+  expect(edgePhaseFraction(3)).toBeCloseTo(0.75);
+  expect(edgePhaseFraction(4)).toBe(0);
 });
