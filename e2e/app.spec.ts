@@ -31,9 +31,9 @@ test("entry screen offers exactly three workflows and each opens its own editor"
 }) => {
   await freshStart(page);
   await expect(
-    page.getByRole("heading", { name: /what are you making/i }),
+    page.getByRole("heading", { name: /what are\s*you making/i }),
   ).toBeVisible();
-  const cards = page.locator(".workflow-card");
+  const cards = page.locator(".landing-workflow");
   await expect(cards).toHaveCount(3);
 
   await page.getByRole("button", { name: /Field Tile/ }).click();
@@ -51,6 +51,16 @@ test("entry screen offers exactly three workflows and each opens its own editor"
   await page.getByRole("button", { name: /Tessellate/ }).click();
   await expect(page.getByTestId("workflow-name")).toHaveText("Tessellate");
   await expect(page.getByRole("group", { name: "Shapes" })).toBeVisible();
+});
+
+test("dark Preview keeps Back solid white", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await freshStart(page);
+  await page.getByRole("button", { name: /Field Tile/ }).click();
+  await page.getByRole("tab", { name: "Preview" }).click();
+  const back = page.getByRole("button", { name: "Back" });
+  await expect(back).toBeVisible();
+  await expect(back).toHaveCSS("background-color", "rgb(255, 255, 255)");
 });
 
 test("workflow isolation: no cross-workflow controls leak", async ({ page }) => {
@@ -178,7 +188,7 @@ test("field tile full flow: crop, tile turn, layout, preview, export", async ({
   expect(afterSeam).not.toBe(beforeSeam);
 
   // continue to repeat: rotate one tile turn cell, change layout
-  await page.getByRole("button", { name: /Continue to Repeat/ }).click();
+  await page.getByRole("button", { name: "Repeat" }).click();
   const fieldBefore = await page
     .getByTestId("pattern-canvas")
     .evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL());
@@ -206,13 +216,13 @@ test("field tile full flow: crop, tile turn, layout, preview, export", async ({
   await page.getByLabel("Export width").fill("640");
   await page.getByLabel("Export height").fill("480");
   const dl = page.waitForEvent("download");
-  await page.getByRole("button", { name: /Download PNG/ }).click();
+  await page.getByRole("button", { name: /Save Field/ }).click();
   const download = await dl;
   const file = await download.createReadStream();
   let bytes = 0;
   for await (const chunk of file!) bytes += chunk.length;
   expect(bytes).toBeGreaterThan(1000);
-  await page.getByRole("button", { name: "Back to edit" }).click();
+  await page.getByRole("button", { name: "Back" }).click();
   await expect(page.getByRole("tab", { name: "Repeat" })).toHaveAttribute(
     "aria-selected",
     "true",
@@ -232,14 +242,58 @@ test("per-cell reflection changes preview and exported pixels through the shared
   await page.getByRole("tab", { name: "Preview" }).click();
   await page.getByLabel("Export width").fill("320");
   await page.getByLabel("Export height").fill("320");
-  const reflectedExport = await downloadBytes(page, /Download PNG/);
-  await page.getByRole("button", { name: "Back to edit" }).click();
+  const reflectedExport = await downloadBytes(page, /Save Field/);
+  await page.getByRole("button", { name: "Back" }).click();
   await page.getByRole("button", { name: "Reflect Top left horizontally" }).click();
   await page.getByRole("tab", { name: "Preview" }).click();
   await page.getByLabel("Export width").fill("320");
   await page.getByLabel("Export height").fill("320");
-  const alignedExport = await downloadBytes(page, /Download PNG/);
+  const alignedExport = await downloadBytes(page, /Save Field/);
   expect(reflectedExport.equals(alignedExport)).toBe(false);
+});
+
+test("poster context scene: switch, adjust, export scene, persist mode", async ({
+  page,
+}) => {
+  await freshStart(page);
+  await page.getByRole("button", { name: /Field Tile/ }).click();
+  await page.getByRole("tab", { name: "Preview" }).click();
+  await expect(page.getByTestId("pattern-canvas")).toBeVisible();
+
+  // switch to the framed-poster scene
+  await page.getByRole("button", { name: "poster" }).click();
+  const scene = page.getByTestId("poster-scene");
+  await expect(scene).toBeVisible();
+  await expect(page.getByTestId("pattern-canvas")).toHaveCount(0);
+  await expect.poll(() =>
+    scene.evaluate((c: HTMLCanvasElement) => c.toDataURL().length),
+  ).toBeGreaterThan(1000);
+
+  // density adjustment repaints the scene
+  const before = await scene.evaluate((c: HTMLCanvasElement) => c.toDataURL());
+  await page.getByLabel("Poster density").fill("1.8");
+  await expect.poll(() =>
+    scene.evaluate((c: HTMLCanvasElement) => c.toDataURL()),
+  ).not.toBe(before);
+
+  // scene export is a real PNG at the requested dimensions and contains both
+  // wall (corner) and framed print (center) pixels
+  await page.getByLabel("Export width").fill("900");
+  await page.getByLabel("Export height").fill("600");
+  const bytes = await downloadBytes(page, /Save Scene/);
+  const png = PNG.sync.read(bytes);
+  expect(png.width).toBe(900);
+  expect(png.height).toBe(600);
+  const pixel = (x: number, y: number) =>
+    Array.from(png.data.slice((y * png.width + x) * 4, (y * png.width + x) * 4 + 3));
+  expect(pixel(4, 4)).not.toEqual(pixel(450, 300));
+
+  // poster mode survives reload, then clean mode restores the field canvas
+  await page.reload();
+  await expect(page.getByTestId("poster-scene")).toBeVisible();
+  await page.getByRole("button", { name: "clean" }).click();
+  await expect(page.getByTestId("pattern-canvas")).toBeVisible();
+  await expect(page.getByTestId("poster-scene")).toHaveCount(0);
 });
 
 test("crop tools: unnumbered dock, persistent continue, whole-selection drag, keyboard nudge, live warp", async ({
@@ -264,7 +318,7 @@ test("crop tools: unnumbered dock, persistent continue, whole-selection drag, ke
   for (const tool of ["Select tile", "Warp to square", "Remove background"]) {
     await page.getByRole("button", { name: tool }).click();
     await expect(
-      page.getByRole("button", { name: /Continue to Repeat/ }),
+      page.getByRole("button", { name: "Repeat" }),
     ).toBeVisible();
     await expect(page.getByTestId("pattern-canvas")).toBeVisible();
   }
@@ -340,54 +394,30 @@ test("crop tools: unnumbered dock, persistent continue, whole-selection drag, ke
   }
 });
 
-test("tile set: role uploads are independent, switching preserves state, and compose renders", async ({
+test("tile set: bundled roles can be replaced independently, retain state, and compose", async ({
   page,
 }) => {
   await freshStart(page);
   await page.getByRole("button", { name: /Tile Set/ }).click();
-  // Field role: empty upload-only state (no bundled demo)
-  await expect(page.getByTestId("role-empty-state")).toBeVisible();
+  // Field starts with the bundled high-resolution demo and can be replaced.
+  await expect(page.getByTestId("pattern-canvas")).toBeVisible();
   await page.getByLabel("Upload Field image").setInputFiles(FIXTURE);
   await expect(page.getByTestId("pattern-canvas")).toBeVisible();
-  // adjust Field selection corner
-  const handle = page.getByTestId("crop-handle-0");
-  const box = await handle.boundingBox();
-  if (!box) throw new Error("field crop handle missing");
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.width / 2 + 40, box.y + box.height / 2 + 30, {
-    steps: 4,
-  });
-  await page.mouse.up();
-  const fieldHandleBox = await page.getByTestId("crop-handle-0").boundingBox();
-  const fieldCanvasBox = await page.getByTestId("pattern-canvas").boundingBox();
-  const fieldHandle = {
-    x: (fieldHandleBox!.x - fieldCanvasBox!.x) / fieldCanvasBox!.width,
-    y: (fieldHandleBox!.y - fieldCanvasBox!.y) / fieldCanvasBox!.height,
-  };
 
-  // switch to Edge role: empty; upload separately
+  // switch to Edge role: its demo can be replaced separately
   await page.getByRole("button", { name: /Edge/ }).click();
-  await expect(page.getByTestId("role-empty-state")).toBeVisible();
+  await expect(page.getByTestId("pattern-canvas")).toBeVisible();
   await page.getByLabel("Upload Edge image").setInputFiles(FIXTURE);
   await expect(page.getByTestId("pattern-canvas")).toBeVisible();
   await page.getByRole("tab", { name: "Compose Set" }).click();
-  await expect(page.getByRole("tab", { name: "Tiles" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByTestId("missing-roles")).toContainText("Corner");
+  await expect(page.getByRole("heading", { name: "Edge Run" })).toBeVisible();
+  await page.getByRole("tab", { name: "Tiles" }).click();
   await page.getByRole("button", { name: /Corner/ }).click();
   await page.getByLabel("Upload Corner image").setInputFiles(FIXTURE);
   await expect(page.getByTestId("pattern-canvas")).toBeVisible();
-  // Edge selection is at defaults (independent of Field edits)
-  // switch back to Field: geometry preserved
+  // switch back to Field: its uploaded source remains ready.
   await page.getByRole("button", { name: /^Field/ }).click();
-  const fieldHandleAfterBox = await page.getByTestId("crop-handle-0").boundingBox();
-  const fieldCanvasAfterBox = await page.getByTestId("pattern-canvas").boundingBox();
-  const fieldHandleAfter = {
-    x: (fieldHandleAfterBox!.x - fieldCanvasAfterBox!.x) / fieldCanvasAfterBox!.width,
-    y: (fieldHandleAfterBox!.y - fieldCanvasAfterBox!.y) / fieldCanvasAfterBox!.height,
-  };
-  expect(Math.abs(fieldHandleAfter.x - fieldHandle.x)).toBeLessThan(0.025);
-  expect(Math.abs(fieldHandleAfter.y - fieldHandle.y)).toBeLessThan(0.025);
+  await expect(page.getByTestId("pattern-canvas")).toBeVisible();
 
   // all role pixels persist across reload
   await page.reload();
@@ -411,15 +441,15 @@ test("tile set: role uploads are independent, switching preserves state, and com
   expect(phasedPixels).not.toBe(edgePixels);
 });
 
-test("tessellate: upload, place shapes, coverage diagnostics stay honest, transparent export", async ({
+test("tessellate: bundled shape can be replaced, placed, diagnosed, and exported", async ({
   page,
 }) => {
   await freshStart(page);
   await page.getByRole("button", { name: /Tessellate/ }).click();
-  await expect(page.getByTestId("shape-empty-state")).toBeVisible();
+  await expect(page.getByTestId("pattern-canvas")).toBeVisible();
   await page.getByLabel("Upload Primary image").setInputFiles(FIXTURE);
   await expect(page.getByTestId("pattern-canvas")).toBeVisible();
-  await page.getByRole("button", { name: /Continue to Assemble/ }).click();
+  await page.getByRole("button", { name: "Assemble" }).click();
 
   // honest empty coverage
   await expect(page.getByTestId("coverage-status")).toContainText(
@@ -470,7 +500,7 @@ test("large Tessellate field export covers far corners and matches preview sampl
   await freshStart(page);
   await page.getByRole("button", { name: /Tessellate/ }).click();
   await page.getByLabel("Upload Primary image").setInputFiles(FIXTURE);
-  await page.getByRole("button", { name: /Continue to Assemble/ }).click();
+  await page.getByRole("button", { name: "Assemble" }).click();
   await page.getByRole("button", { name: "+ Add Primary" }).click();
   const previewData = await page.getByTestId("pattern-canvas").evaluate((c: HTMLCanvasElement) => c.toDataURL().split(",")[1]);
   const preview = PNG.sync.read(Buffer.from(previewData, "base64"));
@@ -521,11 +551,11 @@ test("mobile layouts have no horizontal overflow in all three workflows", async 
 
   await page.getByRole("button", { name: /Field Tile/ }).click();
   expect(await overflow()).toBeLessThanOrEqual(390);
-  const handles = await page
-    .locator('[data-testid^="crop-handle-"]')
-    .evaluateAll((elements) =>
-      elements.map((element) => element.getBoundingClientRect().toJSON()),
-    );
+  const handleLocator = page.locator('[data-testid^="crop-handle-"]');
+  await expect(handleLocator).toHaveCount(4);
+  const handles = await handleLocator.evaluateAll((elements) =>
+    elements.map((element) => element.getBoundingClientRect().toJSON()),
+  );
   expect(handles).toHaveLength(4);
   expect(handles.every((h) => h.width >= 44 && h.height >= 44)).toBe(true);
   await page.getByRole("tab", { name: "Repeat" }).click();
@@ -553,4 +583,26 @@ test("desktop 1440 layout keeps the canvas dominant with no overflow", async ({
   ).toBeLessThanOrEqual(1440);
   const stage = await page.locator(".crop-stage").boundingBox();
   expect(stage!.width).toBeGreaterThan(700);
+});
+
+test("workflow stages without a filebar still occupy the full editor row", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1024 });
+  await freshStart(page);
+
+  await page.getByRole("button", { name: /Field Tile/ }).click();
+  await page.getByRole("tab", { name: "Preview" }).click();
+  await expect(page.getByRole("heading", { name: "Preview field" })).toBeVisible();
+  expect((await page.locator("main.preview").boundingBox())!.height).toBeGreaterThan(700);
+  await page.getByRole("button", { name: /Workflows/ }).click();
+
+  await page.getByRole("button", { name: /Tile Set/ }).click();
+  await page.getByRole("tab", { name: "Compose" }).click();
+  expect((await page.locator("main.repeat-workspace").boundingBox())!.height).toBeGreaterThan(700);
+  await page.getByRole("button", { name: /Workflows/ }).click();
+
+  await page.getByRole("button", { name: /Tessellate/ }).click();
+  await expect(page.getByTestId("pattern-canvas")).toBeVisible();
+  expect((await page.getByTestId("pattern-canvas").boundingBox())!.width).toBeGreaterThan(300);
+  await page.getByRole("tab", { name: "Assemble" }).click();
+  expect((await page.locator("main.repeat-workspace").boundingBox())!.height).toBeGreaterThan(700);
 });

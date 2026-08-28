@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Repeatfield demo tile correction — plan</title>
+<style>
+  :root { --cream:#fff7ee; --orange:#ff8c24; --ink:#241b18; --line:#e6d9cc; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color:var(--ink); }
+  * { box-sizing:border-box; } body { margin:0; background:#f7f2ec; } main { max-width:1040px; margin:auto; padding:36px 24px 64px; }
+  .notice { display:inline-block; padding:6px 10px; color:#8a3c00; background:#ffead7; border-radius:999px; font:700 11px ui-monospace, monospace; letter-spacing:.08em; }
+  h1 { margin:12px 0 8px; font-size:30px; letter-spacing:-.04em; } p { line-height:1.55; color:#685b53; }
+  .card { padding:24px; background:#fff; border:1px solid var(--line); border-radius:22px; margin-top:22px; }
+  .tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; } .tile { text-align:center; } .visual { width:100%; aspect-ratio:1; border:1px solid var(--line); border-radius:18px; overflow:hidden; background:var(--cream); } .visual svg { width:100%; height:100%; display:block; }
+  h2 { margin:0 0 6px; font-size:20px; } h3 { margin:10px 0 2px; font-size:14px; } small { color:#7a6c63; }
+  .comparison { display:grid; grid-template-columns:96px 1fr; gap:18px; align-items:center; margin-top:20px; padding:16px; border-radius:16px; background:#fffaf5; border:1px solid var(--line); }
+  .favicon { width:96px; height:96px; } code { background:#f3ece5; padding:2px 5px; border-radius:5px; } @media(max-width:650px){ .tiles{grid-template-columns:1fr;} }
+</style>
+</head>
+<body><main>
+  <span class="notice">PLAN STAGE — AWAITING GO SIGNAL</span>
+  <h1>Tama — the Field demo needs to be the actual Repeatfield favicon/logo.</h1>
+  <p>The current implementation drew a simplified square-corner arc reconstruction. This correction uses the exact favicon geometry: cream rounded tile, two opposite-corner circles, <code>#ff8c24</code> stroke, and <code>rx=12</code>.</p>
+  <section class="card">
+    <h2>Corrected demo asset direction</h2>
+    <div class="tiles">
+      <article class="tile"><div class="visual"><svg viewBox="0 0 64 64" aria-label="Exact Repeatfield favicon demo"><rect width="64" height="64" rx="12" fill="#fff7ee"/><circle cx="0" cy="0" r="32" fill="none" stroke="#ff8c24" stroke-width="8"/><circle cx="64" cy="64" r="32" fill="none" stroke="#ff8c24" stroke-width="8"/></svg></div><h3>Field Tile</h3><small>Exact favicon / logo, not an approximation</small></article>
+      <article class="tile"><div class="visual"><svg viewBox="0 0 64 64" aria-label="Edge companion"><rect width="64" height="64" rx="12" fill="#fff7ee"/><circle cx="32" cy="0" r="23" fill="none" stroke="#ff8c24" stroke-width="8"/><circle cx="32" cy="64" r="23" fill="none" stroke="#ff8c24" stroke-width="8"/></svg></div><h3>Edge Tile</h3><small>Large complementary orange scallops</small></article>
+      <article class="tile"><div class="visual"><svg viewBox="0 0 64 64" aria-label="Corner companion"><rect width="64" height="64" rx="12" fill="#fff7ee"/><circle cx="0" cy="0" r="23" fill="none" stroke="#ff8c24" stroke-width="8"/></svg></div><h3>Corner Tile</h3><small>Large 90° companion arc</small></article>
+    </div>
+    <div class="comparison"><svg class="favicon" viewBox="0 0 64 64" aria-label="Favicon reference"><rect width="64" height="64" rx="12" fill="#fff7ee"/><circle cx="0" cy="0" r="32" fill="none" stroke="#ff8c24" stroke-width="8"/><circle cx="64" cy="64" r="32" fill="none" stroke="#ff8c24" stroke-width="8"/></svg><p><strong>Reference matched.</strong> The left icon is the exact favicon geometry that will become the Field demo. The two companions retain the larger orange circles you requested.</p></div>
+  </section>
+</main></body></html>

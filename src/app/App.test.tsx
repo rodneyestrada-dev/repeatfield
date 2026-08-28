@@ -1,12 +1,18 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { App, demoImageUrl, repeatfieldAssetUrl, chooseHeroTurnTargets } from "./App";
+import { App, demoAssetUrl, demoImageUrl, repeatfieldAssetUrl, chooseHeroTurnTargets } from "./App";
 import { STORAGE_KEY } from "./state";
 
 beforeEach(() => localStorage.clear());
 
 test("resolves the demo image beneath the deployed base path", () => {
-  expect(demoImageUrl("./")).toBe("./source-tile.jpg");
-  expect(demoImageUrl("/repeatfield/")).toBe("/repeatfield/source-tile.jpg");
+  expect(demoImageUrl("./")).toBe("./demo-tile-field.png");
+  expect(demoImageUrl("/repeatfield/")).toBe("/repeatfield/demo-tile-field.png");
+});
+
+test("resolves the bundled demo image for each workflow role", () => {
+  expect(demoAssetUrl("/repeatfield/", "bundled-demo-edge")).toBe("/repeatfield/demo-tile-edge.png");
+  expect(demoAssetUrl("/repeatfield/", "bundled-demo-corner")).toBe("/repeatfield/demo-tile-corner.png");
+  expect(demoAssetUrl("/repeatfield/", "bundled-demo-petal")).toBe("/repeatfield/demo-shape-petal.png");
 });
 
 test("resolves original brand assets beneath the deployed base path", () => {
@@ -23,47 +29,27 @@ test("hero turn scheduler chooses one tile or a diagonal pair, never adjacent ti
   expect(chooseHeroTurnTargets(sequence(0.99, 0.99))).toEqual([1, 2]);
 });
 
-test("hero motion pause control exposes an immediate paused state", () => {
+test("landing theme toggle exposes an immediate dark state", () => {
   render(<App />);
-  const pause = screen.getByRole("button", { name: "Pause tile motion" });
-  fireEvent.click(pause);
-  expect(screen.getByRole("button", { name: "Play tile motion" })).toHaveAttribute("aria-pressed", "true");
-  expect(document.querySelector(".hero-tiles-wrap")).toHaveAttribute("data-paused", "true");
+  const toggle = screen.getByRole("button", { name: "Switch to dark mode" });
+  fireEvent.click(toggle);
+  expect(screen.getByRole("button", { name: "Switch to light mode" })).toHaveAttribute("aria-pressed", "true");
+  expect(document.querySelector(".landing")).toHaveClass("landing-dark");
 });
 
-test("entry screen uses the approved original logo and exact orange workflow role map", () => {
+test("landing presents the Repeatfield brand and exactly three workflow choices", () => {
   render(<App />);
-  expect(screen.getByRole("img", { name: "Repeatfield" })).toHaveAttribute(
-    "src",
-    expect.stringContaining("repeatfield-tile-logo.svg"),
-  );
-  const tileSet = screen.getByTestId("workflow-diagram-tile-set");
-  expect(Array.from(tileSet.querySelectorAll("rect")).map((rect) => rect.getAttribute("fill"))).toEqual([
-    "#FFC7A1", "#FFC7A1", "#FF8C17",
-    "#FFD4A8", "#FFD4A8", "#FFC7A1",
-    "#FFD4A8", "#FFD4A8", "#FFC7A1",
-  ]);
-  expect(screen.getByTestId("workflow-diagram-field-tile").querySelectorAll('rect[fill="#FFD4A8"]')).toHaveLength(9);
-  const tessellate = screen.getByTestId("workflow-diagram-tessellate");
-  expect(tessellate.querySelectorAll("path")).toHaveLength(1);
-  expect(tessellate.querySelector("path")).toHaveAttribute("fill", "#FF8C17");
-});
-
-test("the entry screen asks what you are making with exactly three choices", () => {
-  render(<App />);
-  expect(
-    screen.getByRole("heading", { name: /what are you making/i }),
-  ).toBeInTheDocument();
-  const cards = document.querySelectorAll(".workflow-card");
+  expect(screen.getByRole("link", { name: "Repeatfield" })).toHaveAttribute("href", "#top");
+  const cards = document.querySelectorAll(".landing-workflow");
   expect(cards).toHaveLength(3);
-  expect(screen.getByText("Field Tile")).toBeInTheDocument();
-  expect(screen.getByText("Tile Set")).toBeInTheDocument();
-  expect(screen.getByText("Tessellate")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Field Tile/ })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Tile Set/ })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Tessellate/ })).toBeInTheDocument();
 });
 
 test("choosing Field Tile opens its editor with the workflow named in the header", () => {
   render(<App />);
-  fireEvent.click(screen.getByText("Field Tile"));
+  fireEvent.click(screen.getByRole("button", { name: /Field Tile/ }));
   expect(screen.getByTestId("workflow-name")).toHaveTextContent("Field Tile");
   expect(screen.getByRole("tab", { name: "Crop" })).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Repeat" })).toBeInTheDocument();
@@ -72,7 +58,7 @@ test("choosing Field Tile opens its editor with the workflow named in the header
 
 test("Field Tile never shows Edge/Corner roles or Tessellate controls", () => {
   render(<App />);
-  fireEvent.click(screen.getByText("Field Tile"));
+  fireEvent.click(screen.getByRole("button", { name: /Field Tile/ }));
   fireEvent.click(screen.getByRole("tab", { name: "Repeat" }));
   // Tile Turn and Field Layout are present
   expect(screen.getByText("Tile Turn")).toBeInTheDocument();
@@ -88,7 +74,7 @@ test("Field Tile never shows Edge/Corner roles or Tessellate controls", () => {
 
 test("Tile Set opens with Field/Edge/Corner roles and no Tessellate or Tile Turn controls", () => {
   render(<App />);
-  fireEvent.click(screen.getByText("Tile Set"));
+  fireEvent.click(screen.getByRole("button", { name: /Tile Set/ }));
   expect(screen.getByTestId("workflow-name")).toHaveTextContent("Tile Set");
   const roles = screen.getByRole("group", { name: "Tile Set roles" });
   expect(roles).toHaveTextContent("Field");
@@ -102,7 +88,7 @@ test("Tile Set opens with Field/Edge/Corner roles and no Tessellate or Tile Turn
 
 test("Tile Set role switching preserves each role's state", () => {
   render(<App />);
-  fireEvent.click(screen.getByText("Tile Set"));
+  fireEvent.click(screen.getByRole("button", { name: /Tile Set/ }));
   const edge = screen.getByRole("button", { name: /Edge/ });
   fireEvent.click(edge);
   expect(edge).toHaveAttribute("aria-pressed", "true");
@@ -117,7 +103,7 @@ test("Tile Set role switching preserves each role's state", () => {
 
 test("Tessellate opens with Primary/Infill and no Tile Turn or Field/Edge/Corner roles", () => {
   render(<App />);
-  fireEvent.click(screen.getByText("Tessellate"));
+  fireEvent.click(screen.getByRole("button", { name: /Tessellate/ }));
   expect(screen.getByTestId("workflow-name")).toHaveTextContent("Tessellate");
   const shapes = screen.getByRole("group", { name: "Shapes" });
   expect(shapes).toHaveTextContent("Primary");
@@ -132,7 +118,7 @@ test("Tessellate opens with Primary/Infill and no Tile Turn or Field/Edge/Corner
 
 test("the workflow choice persists across reload", () => {
   const first = render(<App />);
-  fireEvent.click(screen.getByText("Tile Set"));
+  fireEvent.click(screen.getByRole("button", { name: /Tile Set/ }));
   expect(localStorage.getItem(STORAGE_KEY)).toContain('"tile-set"');
   first.unmount();
   render(<App />);
@@ -141,25 +127,25 @@ test("the workflow choice persists across reload", () => {
 
 test("back to workflows returns to the entry screen and clears the stored project", () => {
   render(<App />);
-  fireEvent.click(screen.getByText("Field Tile"));
+  fireEvent.click(screen.getByRole("button", { name: /Field Tile/ }));
   fireEvent.click(screen.getByRole("button", { name: /Workflows/ }));
   expect(
-    screen.getByRole("heading", { name: /what are you making/i }),
+    screen.getByRole("heading", { name: /what are\s*you making/i }),
   ).toBeInTheDocument();
   expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
 });
 
 test("untouched fresh project exits immediately without confirmation", () => {
   render(<App />);
-  fireEvent.click(screen.getByText("Field Tile"));
+  fireEvent.click(screen.getByRole("button", { name: /Field Tile/ }));
   fireEvent.click(screen.getByRole("button", { name: /Workflows/ }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: /what are you making/i })).toBeVisible();
+  expect(screen.getByRole("heading", { name: /what are\s*you making/i })).toBeVisible();
 });
 
 test("meaningful edits require custom exit confirmation and cancel preserves the project", () => {
   render(<App />);
-  fireEvent.click(screen.getByText("Field Tile"));
+  fireEvent.click(screen.getByRole("button", { name: /Field Tile/ }));
   fireEvent.click(screen.getByRole("tab", { name: "Repeat" }));
   fireEvent.change(screen.getByRole("slider", { name: "Gap" }), { target: { value: "18" } });
   fireEvent.click(screen.getByRole("button", { name: /Workflows/ }));
@@ -168,12 +154,12 @@ test("meaningful edits require custom exit confirmation and cancel preserves the
   expect(screen.getByRole("slider", { name: "Gap" })).toHaveValue("18");
   fireEvent.click(screen.getByRole("button", { name: /Workflows/ }));
   fireEvent.click(screen.getByRole("button", { name: /discard and leave/i }));
-  expect(screen.getByRole("heading", { name: /what are you making/i })).toBeVisible();
+  expect(screen.getByRole("heading", { name: /what are\s*you making/i })).toBeVisible();
 });
 
 test("Field Tile repeat exposes undo/redo controls that track edits", () => {
   render(<App />);
-  fireEvent.click(screen.getByText("Field Tile"));
+  fireEvent.click(screen.getByRole("button", { name: /Field Tile/ }));
   fireEvent.click(screen.getByRole("tab", { name: "Repeat" }));
   const undo = screen.getByRole("button", { name: /Undo Repeat change/ });
   const redo = screen.getByRole("button", { name: /Redo Repeat change/ });
@@ -189,7 +175,7 @@ test("Field Tile repeat exposes undo/redo controls that track edits", () => {
 
 test("keyboard undo/redo works but ignores editable focus", () => {
   render(<App />);
-  fireEvent.click(screen.getByText("Field Tile"));
+  fireEvent.click(screen.getByRole("button", { name: /Field Tile/ }));
   fireEvent.click(screen.getByRole("tab", { name: "Repeat" }));
   const gap = screen.getByRole("slider", { name: "Gap" });
   fireEvent.change(gap, { target: { value: "18" } });
@@ -202,9 +188,9 @@ test("keyboard undo/redo works but ignores editable focus", () => {
   expect(gap).toHaveValue("18");
 });
 
-test("crop tools are unnumbered icon buttons with Continue always present", () => {
+test("crop tools are unnumbered icon buttons with a concise Repeat CTA", () => {
   render(<App />);
-  fireEvent.click(screen.getByText("Field Tile"));
+  fireEvent.click(screen.getByRole("button", { name: /Field Tile/ }));
   const dock = screen.getByRole("toolbar", { name: "Crop tools" });
   const buttons = Array.from(dock.querySelectorAll("button"));
   expect(buttons.length).toBeGreaterThanOrEqual(7);
@@ -214,15 +200,13 @@ test("crop tools are unnumbered icon buttons with Continue always present", () =
   }
   for (const tool of ["Select tile", "Warp to square", "Remove background"]) {
     fireEvent.click(screen.getByRole("button", { name: tool }));
-    expect(
-      screen.getByRole("button", { name: /Continue to Repeat/ }),
-    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Repeat" })).toBeVisible();
   }
 });
 
 test("clicking the active tool opens its options; Escape closes them", () => {
   render(<App />);
-  fireEvent.click(screen.getByText("Field Tile"));
+  fireEvent.click(screen.getByRole("button", { name: /Field Tile/ }));
   const select = screen.getByRole("button", { name: "Select tile" });
   expect(select).toHaveAttribute("aria-pressed", "true");
   fireEvent.click(select);
@@ -236,7 +220,7 @@ test("clicking the active tool opens its options; Escape closes them", () => {
 
 test("tile turn exposes accessible per-cell reflection and reset controls", () => {
   render(<App />);
-  fireEvent.click(screen.getByText("Field Tile"));
+  fireEvent.click(screen.getByRole("button", { name: /Field Tile/ }));
   fireEvent.click(screen.getByRole("tab", { name: "Repeat" }));
   const cell = screen.getByRole("button", {
     name: /Top left tile — 0° — not reflected horizontally — not reflected vertically/,
@@ -254,7 +238,7 @@ test("tile turn exposes accessible per-cell reflection and reset controls", () =
 
 test("tile turn rotates a single cell and updates its angle label", () => {
   render(<App />);
-  fireEvent.click(screen.getByText("Field Tile"));
+  fireEvent.click(screen.getByRole("button", { name: /Field Tile/ }));
   fireEvent.click(screen.getByRole("tab", { name: "Repeat" }));
   const cell = screen.getByRole("button", { name: /Top right tile — 0°/ });
   fireEvent.click(cell);
@@ -276,7 +260,7 @@ test("tile turn rotates a single cell and updates its angle label", () => {
 
 test("field layout options live under Field Layout, symmetry under Advanced", () => {
   render(<App />);
-  fireEvent.click(screen.getByText("Field Tile"));
+  fireEvent.click(screen.getByRole("button", { name: /Field Tile/ }));
   fireEvent.click(screen.getByRole("tab", { name: "Repeat" }));
   const layout = screen.getByRole("group", { name: "Field Layout options" });
   expect(layout).toHaveTextContent("Straight");
@@ -290,7 +274,7 @@ test("field layout options live under Field Layout, symmetry under Advanced", ()
 
 test("tessellate coverage panel reports honestly when nothing is placed", () => {
   render(<App />);
-  fireEvent.click(screen.getByText("Tessellate"));
+  fireEvent.click(screen.getByRole("button", { name: /Tessellate/ }));
   // jump to assemble stage
   fireEvent.click(screen.getByRole("tab", { name: "Assemble" }));
   expect(screen.getByTestId("coverage-status")).toHaveTextContent(

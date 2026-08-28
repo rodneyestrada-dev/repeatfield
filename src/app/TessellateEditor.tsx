@@ -384,7 +384,7 @@ function ShapesStage({
                 className="primary continue"
                 onClick={() => dispatch({ type: "set-stage", stage: "assemble" })}
               >
-                Continue to Assemble →
+                Assemble
               </button>
             </div>
           </div>
@@ -404,7 +404,7 @@ function ShapesStage({
                     dispatch({ type: "set-stage", stage: "assemble" })
                   }
                 >
-                  Continue to Assemble →
+                  Assemble
                 </button>
               </div>
             )}

@@ -51,9 +51,22 @@ const newProjectId = () =>
 export const DEMO_ASSET: BrowserAssetRef = {
   id: "bundled-demo",
   name: "Demo tile",
-  type: "image/jpeg",
+  type: "image/png",
   kind: "demo",
 };
+
+/** Bundled demo asset for each workflow role; ids map to files in public/. */
+export const DEMO_ASSETS = {
+  "field-tile": DEMO_ASSET,
+  "tile-set": {
+    field: { ...DEMO_ASSET, id: "bundled-demo-field", name: "Demo Field tile" },
+    border: { ...DEMO_ASSET, id: "bundled-demo-edge", name: "Demo Edge tile" },
+    corner: { ...DEMO_ASSET, id: "bundled-demo-corner", name: "Demo Corner tile" },
+  },
+  tessellate: {
+    primary: { ...DEMO_ASSET, id: "bundled-demo-petal", name: "Demo shape" },
+  },
+} as const;
 
 // ---------------------------------------------------------------------------
 // Shared Crop state — selection geometry is separate from warp geometry.
@@ -158,6 +171,28 @@ export const DEFAULT_FIELD_COMPOSITION: FieldComposition = {
 
 export type FieldTileStage = "crop" | "repeat" | "preview";
 
+// Phase 1.5 — framed-poster context scene. Presentation-only state: it never
+// enters undo history and never marks a project dirty.
+export type PreviewMode = "clean" | "poster";
+
+export interface PreviewSceneState {
+  mode: PreviewMode;
+  posterZoom: number;
+  posterOffsetX: number;
+  posterOffsetY: number;
+  frameColor: string;
+  matColor: string;
+}
+
+export const DEFAULT_PREVIEW_SCENE: PreviewSceneState = {
+  mode: "clean",
+  posterZoom: 1,
+  posterOffsetX: 0,
+  posterOffsetY: 0,
+  frameColor: "#17151a",
+  matColor: "#fffdf5",
+};
+
 export interface FieldTileProject {
   id: string;
   workflow: "field-tile";
@@ -165,6 +200,7 @@ export interface FieldTileProject {
   stage: FieldTileStage;
   crop: CropState;
   composition: FieldComposition;
+  scene: PreviewSceneState;
   history: { past: FieldComposition[]; future: FieldComposition[] };
 }
 
@@ -262,6 +298,11 @@ export function defaultShapeSlot(): ShapeSlot {
   };
 }
 
+/** Tessellate primary slot preloaded with the bundled demo shape. */
+export function primaryWithDemo(): ShapeSlot {
+  return { ...defaultShapeSlot(), hasImage: true, asset: { ...DEMO_ASSETS.tessellate.primary } };
+}
+
 export interface TessellateComposition {
   instances: ShapeInstance[];
   lattice: RepeatLattice;
@@ -320,6 +361,7 @@ export function createProject(workflow: WorkflowKind): PatternProject {
         ...DEFAULT_FIELD_COMPOSITION,
         metatile: normalizeMetatile(DEFAULT_FIELD_COMPOSITION.metatile),
       },
+      scene: { ...DEFAULT_PREVIEW_SCENE },
       history: { past: [], future: [] },
     };
   if (workflow === "tile-set")
@@ -329,9 +371,9 @@ export function createProject(workflow: WorkflowKind): PatternProject {
       stage: "tiles",
       activeRole: "field",
       roles: {
-        field: { crop: defaultCropState(), hasImage: false, asset: null },
-        border: { crop: defaultCropState(), hasImage: false, asset: null },
-        corner: { crop: defaultCropState(), hasImage: false, asset: null },
+        field: { crop: defaultCropState(), hasImage: true, asset: { ...DEMO_ASSETS["tile-set"].field } },
+        border: { crop: defaultCropState(), hasImage: true, asset: { ...DEMO_ASSETS["tile-set"].border } },
+        corner: { crop: defaultCropState(), hasImage: true, asset: { ...DEMO_ASSETS["tile-set"].corner } },
       },
       setLook: { ...DEFAULT_LOOK },
       composition: { ...DEFAULT_TILE_SET_COMPOSITION },
@@ -342,7 +384,7 @@ export function createProject(workflow: WorkflowKind): PatternProject {
     workflow,
     stage: "shapes",
     activeShape: "primary",
-    shapes: { primary: defaultShapeSlot(), infill: defaultShapeSlot() },
+    shapes: { primary: primaryWithDemo(), infill: defaultShapeSlot() },
     composition: {
       ...DEFAULT_TESSELLATE_COMPOSITION,
       instances: [],
@@ -399,6 +441,14 @@ export function deserializeProject(raw: string | null): PatternProject | null {
     // only durable references: never claim Ready or substitute demo pixels.
     if (project.workflow === "field-tile") {
       if (!("sourceAsset" in project)) project.sourceAsset = null;
+      // Phase 1.5 scene state predates some v3 saves: hydrate defaults and
+      // clamp anything persisted out of range.
+      const scene = { ...DEFAULT_PREVIEW_SCENE, ...(project.scene ?? {}) };
+      if (scene.mode !== "clean" && scene.mode !== "poster") scene.mode = "clean";
+      scene.posterZoom = Math.max(0.6, Math.min(2.2, Number(scene.posterZoom) || 1));
+      scene.posterOffsetX = Math.max(-0.6, Math.min(0.6, Number(scene.posterOffsetX) || 0));
+      scene.posterOffsetY = Math.max(-0.6, Math.min(0.6, Number(scene.posterOffsetY) || 0));
+      project.scene = scene;
       project.composition.metatile = normalizeMetatile(project.composition.metatile);
       project.history ??= { past: [], future: [] };
       const past = Array.isArray(project.history.past) ? project.history.past : [];
@@ -460,6 +510,11 @@ export type Action =
       type: "field-comp";
       key: keyof FieldComposition;
       value: FieldComposition[keyof FieldComposition];
+    }
+  | {
+      type: "field-scene";
+      key: keyof PreviewSceneState;
+      value: PreviewSceneState[keyof PreviewSceneState];
     }
   | { type: "rotate-metatile-cell"; index: number; delta: 1 | -1 }
   | { type: "reflect-metatile-cell"; index: number; axis: "x" | "y" }
@@ -795,6 +850,18 @@ export function appReducer(state: AppState, action: Action): AppState {
         if (Object.is(project.composition[action.key], value)) return state;
         return withComposition({ ...project.composition, [action.key]: value });
       }
+      case "field-scene": {
+        // Presentation state only: no undo history, no dirty flag.
+        let value = action.value;
+        if (action.key === "posterZoom")
+          value = Math.max(0.6, Math.min(2.2, Number(value)));
+        if (action.key === "posterOffsetX" || action.key === "posterOffsetY")
+          value = Math.max(-0.6, Math.min(0.6, Number(value)));
+        if (Object.is(project.scene[action.key], value)) return state;
+        return {
+          project: { ...project, scene: { ...project.scene, [action.key]: value } },
+        };
+      }
       case "rotate-metatile-cell":
       case "reflect-metatile-cell":
       case "reset-metatile-cell": {
@@ -1027,16 +1094,18 @@ const cropMeaningful = (crop: CropState) => {
     JSON.stringify(baseline);
 };
 
-/** Navigation/disclosure is not dirty; pixels, geometry, and output settings are. */
+/** Navigation/disclosure is not dirty; pixels, geometry, and output settings are.
+ *  Bundled demo assets ship with the app and are never user pixels: they do not
+ *  make a fresh project dirty. */
 export function isProjectDirty(project: PatternProject): boolean {
   if (project.workflow === "field-tile")
     return project.sourceAsset?.kind === "indexeddb" || cropMeaningful(project.crop) ||
       JSON.stringify(project.composition) !== JSON.stringify(DEFAULT_FIELD_COMPOSITION);
   if (project.workflow === "tile-set")
-    return Object.values(project.roles).some((role) => Boolean(role.asset) || cropMeaningful(role.crop)) ||
+    return Object.values(project.roles).some((role) => role.asset?.kind === "indexeddb" || cropMeaningful(role.crop)) ||
       JSON.stringify(project.composition) !== JSON.stringify(DEFAULT_TILE_SET_COMPOSITION) ||
       JSON.stringify(project.setLook) !== JSON.stringify(DEFAULT_LOOK);
-  return Object.values(project.shapes).some((shape) => Boolean(shape.asset) ||
+  return Object.values(project.shapes).some((shape) => shape.asset?.kind === "indexeddb" ||
       JSON.stringify({ ...shape, asset: null, hasImage: false }) !== JSON.stringify(defaultShapeSlot())) ||
     JSON.stringify(project.composition) !== JSON.stringify(DEFAULT_TESSELLATE_COMPOSITION);
 }

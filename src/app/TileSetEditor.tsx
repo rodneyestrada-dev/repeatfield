@@ -103,7 +103,7 @@ export function TileSetEditor({
               img={activeImg}
               crop={project.roles[activeRole].crop}
               dispatch={dispatch}
-              continueLabel="Continue to Compose Set →"
+              continueLabel="Compose Set"
               onContinue={() =>
                 dispatch({ type: "set-stage", stage: "compose" })
               }
@@ -139,7 +139,7 @@ export function TileSetEditor({
                     dispatch({ type: "set-stage", stage: "compose" })
                   }
                 >
-                  Continue to Compose Set →
+                  Compose Set
                 </button>
               </div>
             </div>

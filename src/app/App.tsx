@@ -23,11 +23,30 @@ export function repeatfieldAssetUrl(base: string, filename: string) {
 }
 
 export function demoImageUrl(base: string) {
-  return repeatfieldAssetUrl(base, "source-tile.jpg");
+  return repeatfieldAssetUrl(base, "demo-tile-field.png");
 }
 
+const DEMO_FILES: Record<string, string> = {
+  "bundled-demo": "demo-tile-field.png",
+  "bundled-demo-field": "demo-tile-field.png",
+  "bundled-demo-edge": "demo-tile-edge.png",
+  "bundled-demo-corner": "demo-tile-corner.png",
+  "bundled-demo-petal": "demo-shape-petal.png",
+};
+
+/** Resolve a bundled demo id to its public asset beneath any Vite base path. */
+export function demoAssetUrl(base: string, assetId: string) {
+  return repeatfieldAssetUrl(base, DEMO_FILES[assetId] ?? DEMO_FILES["bundled-demo"]);
+}
+
+const assetUrl = (filename: string) =>
+  repeatfieldAssetUrl(import.meta.env.BASE_URL, filename);
+
 const DEMO = demoImageUrl(import.meta.env.BASE_URL);
-const LOGO = repeatfieldAssetUrl(import.meta.env.BASE_URL, "repeatfield-tile-logo.svg");
+const DEMO_URLS: Record<string, string> = Object.fromEntries(
+  Object.keys(DEMO_FILES).map((assetId) => [assetId, demoAssetUrl(import.meta.env.BASE_URL, assetId)]),
+);
+const LOGO = assetUrl("repeatfield-tile-logo.svg");
 
 export function chooseHeroTurnTargets(random: () => number = Math.random): readonly number[] {
   const pair = Math.max(0, Math.min(0.999999, random())) >= 0.5;
@@ -100,7 +119,7 @@ function useProjectAssetUrls(project: PatternProject | null) {
       if (!project) return;
       const next: AssetUrls = {};
       for (const [slot, ref] of projectAssetEntries(project)) {
-        if (ref.kind === "demo") next[slot] = DEMO;
+        if (ref.kind === "demo") next[slot] = DEMO_URLS[ref.id] ?? DEMO;
         else {
           const blob = await loadAsset(project.id, ref);
           if (blob) {
@@ -179,50 +198,75 @@ function WorkflowDiagram({ kind }: { kind: WorkflowKind }) {
   );
 }
 
-function EntryScreen({
-  onChoose,
-}: {
-  onChoose: (workflow: WorkflowKind) => void;
-}) {
-  return (
-    <main className="entry-screen">
-      <div className="brand entry-brand">
-        <img className="brand-mark" src={LOGO} alt="Repeatfield" />
-        <span>
-          <b>Repeatfield</b>
-          <small>Patterns from your own tiles.</small>
-        </span>
-      </div>
-      <HeroTiles />
-      <h1>What are you making?</h1>
-      <div className="workflow-choices">
-        <button
-          className="workflow-card"
-          onClick={() => onChoose("field-tile")}
-        >
-          <WorkflowDiagram kind="field-tile" />
-          <b>Field Tile</b>
-          <span>One square tile repeated across a surface.</span>
-        </button>
-        <button className="workflow-card" onClick={() => onChoose("tile-set")}>
-          <WorkflowDiagram kind="tile-set" />
-          <b>Tile Set</b>
-          <span>A coordinated Field, Edge, and Corner set.</span>
-        </button>
-        <button
-          className="workflow-card"
-          onClick={() => onChoose("tessellate")}
-        >
-          <WorkflowDiagram kind="tessellate" />
-          <b>Tessellate</b>
-          <span>Irregular transparent shapes fitted together.</span>
-        </button>
-      </div>
-      <p className="entry-note">
-        ● Browser local — your images never leave this browser.
-      </p>
-    </main>
-  );
+type GalleryPattern = "aligned" | "checker" | "rowturn" | "brick" | "halfdrop" | "tileset";
+
+function PatternSwatch({ pattern }: { pattern: GalleryPattern }) {
+  const cells: { x: number; y: number; angle: number; fill?: string; stroke?: string }[] = [];
+  if (pattern === "brick") {
+    for (let row = 0; row < 4; row++) for (let column = -1; column < 5; column++)
+      cells.push({ x: column * 50 + (row % 2 ? 25 : 0), y: row * 50, angle: 0 });
+  } else if (pattern === "halfdrop") {
+    for (let row = -1; row < 5; row++) for (let column = 0; column < 4; column++)
+      cells.push({ x: column * 50, y: row * 50 + (column % 2 ? 25 : 0), angle: 0 });
+  } else {
+    for (let row = 0; row < 4; row++) for (let column = 0; column < 4; column++) {
+      const edge = row === 0 || row === 3 || column === 0 || column === 3;
+      const corner = (row === 0 || row === 3) && (column === 0 || column === 3);
+      cells.push({
+        x: column * 50, y: row * 50,
+        angle: pattern === "checker" ? ((row + column) % 2 ? 90 : 0) : pattern === "rowturn" ? (row % 2 ? 90 : 0) : 0,
+        fill: pattern === "tileset" ? (corner ? "#ff8c24" : edge ? "#ffc7a1" : "#fff7ee") : undefined,
+        stroke: pattern === "tileset" && edge ? "#cf5e00" : undefined,
+      });
+    }
+  }
+  return <svg className="landing-swatch" viewBox="0 0 200 200" aria-hidden="true">
+    <defs><clipPath id={`clip-${pattern}`}><rect width="50" height="50" /></clipPath></defs>
+    {cells.map((cell, index) => <g key={index} transform={`translate(${cell.x} ${cell.y}) rotate(${cell.angle} 25 25)`}>
+      <rect width="50" height="50" fill={cell.fill ?? "#fff7ee"} />
+      <g clipPath={`url(#clip-${pattern})`}><circle cx="0" cy="0" r="25" fill="none" stroke={cell.stroke ?? "#ff8c24"} strokeWidth="6" /><circle cx="50" cy="50" r="25" fill="none" stroke={cell.stroke ?? "#ff8c24"} strokeWidth="6" /></g>
+    </g>)}
+  </svg>;
+}
+
+function LandingTileGrid() {
+  return <div className="landing-tile-grid" aria-label="A four-tile Repeatfield pattern preview">
+    {[0, 90, 90, 0].map((angle, index) => <img key={index} src={LOGO} alt="" style={{ transform: `rotate(${angle}deg)` }} />)}
+  </div>;
+}
+
+function EntryScreen({ onChoose }: { onChoose: (workflow: WorkflowKind) => void }) {
+  const [dark, setDark] = useState(false);
+  const workflows: { kind: WorkflowKind; number: string; title: string; copy: string }[] = [
+    { kind: "field-tile", number: "01 / CROP → REPEAT → PREVIEW", title: "Field Tile", copy: "One square tile, turned and repeated across a surface. Straight, brick, or half-drop." },
+    { kind: "tile-set", number: "02 / TILES → COMPOSE SET", title: "Tile Set", copy: "Field, Edge, and Corner composed as one family — edge runs, corner joins, shared set logic." },
+    { kind: "tessellate", number: "03 / SHAPES → ASSEMBLE → VERIFY", title: "Tessellate", copy: "Transparent shapes fitted together without hidden gaps — coverage you can verify." },
+  ];
+  const gallery: { pattern: GalleryPattern; title: string; type: string }[] = [
+    { pattern: "aligned", title: "Aligned", type: "Field Tile" }, { pattern: "checker", title: "Checker turn", type: "Tile Turn" },
+    { pattern: "rowturn", title: "Row turn", type: "Tile Turn" }, { pattern: "brick", title: "Brick", type: "Field Layout" },
+    { pattern: "halfdrop", title: "Half-drop", type: "Field Layout" }, { pattern: "tileset", title: "Field · Edge · Corner", type: "Tile Set" },
+  ];
+  return <main className={`landing ${dark ? "landing-dark" : ""}`}>
+    <div className="landing-ambient" aria-hidden="true" />
+    <div className="landing-shell">
+      <header className="landing-topbar">
+        <a className="landing-brand" href="#top"><img src={LOGO} alt="" /><b>Repeatfield</b></a>
+        <nav aria-label="Landing sections"><a href="#workflows">Workflows</a><a href="#gallery">Gallery</a><a href="#faq">FAQ</a></nav>
+        <div className="landing-actions"><button className="landing-icon-button" onClick={() => setDark((value) => !value)} aria-label={dark ? "Switch to light mode" : "Switch to dark mode"} aria-pressed={dark}>{dark ? "☀" : "◐"}</button><button className="landing-primary" onClick={() => onChoose("field-tile")}>Open studio</button></div>
+      </header>
+      <section className="landing-hero" id="top">
+        <div><span className="landing-eyebrow">Browser local · no upload</span><h1>One tile.<br />Infinite fields.</h1><p>Upload a tile, turn it, repeat it, and export the field. A studio for repetition, symmetry, and what happens at the edge — no account, no install, your images stay in your browser.</p><div className="landing-hero-actions"><button className="landing-primary" onClick={() => onChoose("field-tile")}>Start making ↘</button><a className="landing-secondary" href="#workflows">See how it works</a></div></div>
+        <div className="landing-hero-visual"><LandingTileGrid /></div>
+      </section>
+      <section className="landing-trust" aria-label="Product benefits"><span>Browser local <b>No upload</b></span><span>No account <b>Open & make</b></span><span>PNG export <b>Custom sizes</b></span><span>50-step undo <b>Per project</b></span></section>
+      <section className="landing-section" id="workflows"><div className="landing-heading"><div><span>01 / Workflows</span><h2>What are<br />you making?</h2></div><p>Every project starts with one honest question. Each workflow keeps its own mental model — square repeats, coordinated sets, or irregular shapes — and never switches silently.</p></div><div className="landing-workflows">{workflows.map((workflow) => <button key={workflow.kind} className="landing-workflow" onClick={() => onChoose(workflow.kind)}><span>{workflow.number}</span><i>↗</i><h3>{workflow.title}</h3><p>{workflow.copy}</p><div className={`landing-diagram ${workflow.kind}`}><WorkflowDiagram kind={workflow.kind} /></div></button>)}</div></section>
+      <section className="landing-section landing-gallery-section" id="gallery"><div className="landing-heading"><div><span>02 / Gallery</span><h2>Same tile.<br />Six systems.</h2></div><p>Every pattern below is built from the same single tile — only orientation, layout, and role change. That is the core Repeatfield idea.</p></div><div className="landing-gallery">{gallery.map((item) => <figure key={item.pattern}><PatternSwatch pattern={item.pattern} /><figcaption><b>{item.title}</b><small>{item.type}</small></figcaption></figure>)}</div></section>
+      <section className="landing-section landing-faq" id="faq"><div className="landing-heading"><div><span>03 / FAQ</span><h2>Good<br />to know.</h2></div><p>Repeatfield is scoped honestly: it works locally in your browser, keeps uploaded images on-device, and exports the field you make.</p></div><details><summary>Do my images leave my browser?</summary><p>No. Your image work stays in this browser.</p></details><details><summary>What can I export?</summary><p>Export your finished field as a PNG at your chosen dimensions.</p></details><details><summary>What are the current workflows?</summary><p>Field Tile, Tile Set, and Tessellate.</p></details></section>
+      <section className="landing-cta"><h2>Ready to make your first field?</h2><p>Pick a workflow, upload a tile, and watch it repeat.</p><button className="landing-primary" onClick={() => onChoose("field-tile")}>Open the studio</button></section>
+      <footer className="landing-footer"><span>Repeatfield · Patterns from your own tiles.</span><span>Browser local · no upload · no install</span></footer>
+    </div>
+  </main>;
 }
 
 const STAGE_LABELS: Record<WorkflowKind, [string, string][]> = {

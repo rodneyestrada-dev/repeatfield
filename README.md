@@ -23,7 +23,7 @@ One square tile repeated across a surface. Starts with the bundled demo tile or 
 - **Tile Turn**: rotate each of the four tiles in the 2×2 **Repeat Block** (click = clockwise, Shift-click = counter-clockwise), rotate/reset/randomize the whole block, or apply editable orientation presets (Aligned, Checker turn, Pinwheel, …). All 256 raw orientation assignments are reachable; 70 are canonical under whole-block rotation.
 - **Field Layout**: Straight, Brick, or Half-Drop placement of the completed Repeat Block.
 - **Advanced Symmetry**: Mirror Grid and Triangle/Radial Kaleidoscope, kept apart from ordinary layout.
-- **Preview/Export**: square/portrait/landscape framing and custom-dimension PNG export from the same renderer.
+- **Preview/Export**: square/portrait/landscape framing and custom-dimension PNG export from the same renderer. A `Clean / Poster` switch turns the preview into a framed-poster context scene (Phase 1.5): the field is mapped into a matted print on a wall with density, pan, frame, and mat controls, and the scene exports as its own PNG separate from the clean field.
 
 ### Tile Set — `Tiles → Compose Set`
 

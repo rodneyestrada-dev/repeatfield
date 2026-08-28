@@ -7,6 +7,7 @@ import {
   validateFieldTile,
   validateTessellate,
   validateTileSet,
+  DEFAULT_PREVIEW_SCENE,
   INITIAL_STATE,
   type AppState,
   type FieldTileProject,
@@ -88,9 +89,63 @@ test("field hydration tolerates malformed legacy history arrays without discardi
   expect(restored.history).toEqual({ past: [], future: [] });
 });
 
+// ---------------------------------------------------------------------------
+// Phase 1.5 — framed-poster scene state
+// ---------------------------------------------------------------------------
+
+test("legacy projects without scene state hydrate poster defaults", () => {
+  const legacy = createProject("field-tile") as FieldTileProject;
+  delete (legacy as unknown as { scene?: unknown }).scene;
+  const restored = deserializeProject(JSON.stringify({ version: 3, project: legacy })) as FieldTileProject;
+  expect(restored.scene).toEqual(DEFAULT_PREVIEW_SCENE);
+});
+
+test("scene hydration clamps out-of-range and bogus persisted values", () => {
+  const legacy = createProject("field-tile") as FieldTileProject;
+  (legacy as unknown as { scene: unknown }).scene = {
+    mode: "billboard",
+    posterZoom: 99,
+    posterOffsetX: -99,
+    posterOffsetY: Number.NaN,
+  };
+  const restored = deserializeProject(JSON.stringify({ version: 3, project: legacy })) as FieldTileProject;
+  expect(restored.scene.mode).toBe("clean");
+  expect(restored.scene.posterZoom).toBe(2.2);
+  expect(restored.scene.posterOffsetX).toBe(-0.6);
+  expect(restored.scene.posterOffsetY).toBe(0);
+});
+
+test("scene changes are presentation-only: no undo history, not dirty, but persisted", () => {
+  let s = fieldTile();
+  s = appReducer(s, { type: "field-scene", key: "mode", value: "poster" });
+  s = appReducer(s, { type: "field-scene", key: "posterZoom", value: 1.6 });
+  const project = s.project as FieldTileProject;
+  expect(project.scene.mode).toBe("poster");
+  expect(project.scene.posterZoom).toBe(1.6);
+  expect(project.history.past).toHaveLength(0);
+  expect(isProjectDirty(project)).toBe(false);
+  const restored = deserializeProject(serializeProject(project)) as FieldTileProject;
+  expect(restored.scene).toEqual(project.scene);
+});
+
+test("scene reducer clamps zoom and pan to the poster control ranges", () => {
+  let s = fieldTile();
+  s = appReducer(s, { type: "field-scene", key: "posterZoom", value: 9 });
+  s = appReducer(s, { type: "field-scene", key: "posterOffsetX", value: -9 });
+  const project = s.project as FieldTileProject;
+  expect(project.scene.posterZoom).toBe(2.2);
+  expect(project.scene.posterOffsetX).toBe(-0.6);
+});
+
 test("fresh projects are untouched while geometry and asset edits are meaningful", () => {
   const fresh = createProject("field-tile");
   expect(isProjectDirty(fresh)).toBe(false);
+  const tileSetFresh = createProject("tile-set") as TileSetProject;
+  const tessellateFresh = createProject("tessellate") as TessellateProject;
+  expect(isProjectDirty(tileSetFresh)).toBe(false);
+  expect(isProjectDirty(tessellateFresh)).toBe(false);
+  expect(tileSetFresh.roles.field.asset?.type).toBe("image/png");
+  expect(tessellateFresh.shapes.primary.asset?.type).toBe("image/png");
   const edited = appReducer({ project: fresh }, {
     type: "crop-set-corner", index: 0, point: { x: 0.2, y: 0.2 },
   }).project!;
@@ -333,14 +388,14 @@ test("role crop edits are independent between Field, Edge, and Corner", () => {
   });
 });
 
-test("switching roles preserves each role's geometry and image status", () => {
+test("switching roles preserves each role's geometry and bundled image status", () => {
   let s = tileSet();
   s = appReducer(s, { type: "role-image", role: "field", hasImage: true });
   s = appReducer(s, { type: "set-active-role", role: "corner" });
   s = appReducer(s, { type: "set-active-role", role: "field" });
   const project = s.project as TileSetProject;
   expect(project.roles.field.hasImage).toBe(true);
-  expect(project.roles.corner.hasImage).toBe(false);
+  expect(project.roles.corner.hasImage).toBe(true);
   expect(project.activeRole).toBe("field");
 });
 

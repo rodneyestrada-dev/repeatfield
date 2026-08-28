@@ -59,12 +59,14 @@ input:focus-visible {
   outline-offset: 2px;
 }
 .primary {
-  border-color: #8f2f00;
-  background: linear-gradient(135deg, #923000 0%, #a83a00 52%, #7f2600 100%);
+  border-color: transparent;
+  background: linear-gradient(100deg, #ff3d0d 0%, #ff6a1a 52%, #ff8c2a 100%);
   color: #fff;
   font-weight: 600;
   text-decoration: none;
-  box-shadow: 0 8px 22px rgba(255, 122, 0, 0.25);
+  min-height: 44px;
+  border-radius: 999px;
+  box-shadow: 0 8px 22px rgba(255, 106, 26, 0.25);
 }
 .sr-only {
   position: absolute;
@@ -78,6 +80,11 @@ input:focus-visible {
   display: grid;
   grid-template-rows: 72px 50px 1fr;
 }
+/* Stages such as preview and compose omit .filebar; place their main content
+   explicitly so grid auto-placement cannot collapse it into the 50px row. */
+.app-shell > .topbar { grid-row: 1; }
+.app-shell > .filebar { grid-row: 2; }
+.app-shell > main { grid-row: 3; min-height: 0; }
 .topbar {
   display: grid;
   grid-template-columns: 280px 1fr 210px;
@@ -255,7 +262,7 @@ h2 {
   min-width: 0;
   min-height: 0;
   padding: 18px;
-  background: #efe4d8;
+  background: #fff;
   position: relative;
 }
 .crop-canvas-wrap {
@@ -268,7 +275,7 @@ h2 {
   height: 100%;
   display: block;
   border-radius: 10px;
-  background: #f2ebe2;
+  background: #fff;
   border: 1px solid rgba(66, 42, 30, 0.22);
 }
 .crop-lasso {
@@ -546,7 +553,7 @@ h2 {
 .field-stage {
   position: relative;
   padding: 16px;
-  background: #efe4d8;
+  background: #fff;
   min-width: 0;
   min-height: 0;
 }
@@ -674,6 +681,13 @@ h2 {
   max-height: 100%;
   box-shadow: 0 24px 80px #0008;
 }
+.preview-scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
 .preview-square .preview-canvas {
   width: min(86vh, 86vw);
   height: min(86vh, 86vw);
@@ -704,6 +718,12 @@ h2 {
 .preview-toolbar button {
   min-height: 34px;
 }
+.preview-toolbar .preview-back {
+  background: #fff;
+  color: #241b18;
+  border-color: rgba(36, 27, 24, 0.16);
+  opacity: 1;
+}
 .preview-toolbar label {
   font: 9px "IBM Plex Mono";
   color: #5f5049;
@@ -713,6 +733,42 @@ h2 {
   border: 1px solid var(--line);
   border-radius: 5px;
   padding: 7px;
+}
+.scene-toolbar {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 8px 14px;
+  background: rgba(255, 250, 245, 0.94);
+  border: 1px solid #ffffff30;
+  border-radius: 10px;
+  box-shadow: 0 8px 30px #0004;
+  white-space: nowrap;
+}
+.scene-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: 9px "IBM Plex Mono";
+  color: #5f5049;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.scene-toolbar input[type="range"] {
+  width: 92px;
+  accent-color: var(--orange);
+}
+.scene-toolbar input[type="color"] {
+  width: 30px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
 }
 .frame-select {
   display: flex;
@@ -733,6 +789,16 @@ h2 {
   #root {
     overflow-y: auto;
     overflow-x: hidden;
+  }
+  .preview-toolbar,
+  .scene-toolbar {
+    max-width: calc(100vw - 16px);
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+  .scene-toolbar {
+    bottom: 8px;
+    gap: 8px;
   }
   .app-shell {
     height: auto;
@@ -961,6 +1027,11 @@ h2 {
   min-height: 0;
   display: grid;
   grid-template-columns: 64px minmax(360px, 1fr) 300px;
+}
+/* Shapes has no tool dock, so use its own two-column grid rather than
+   auto-placing the canvas into the 64px dock column. */
+.tessellate-shape-body {
+  grid-template-columns: minmax(360px, 1fr) 300px;
 }
 .tool-dock {
   display: flex;
@@ -1541,8 +1612,14 @@ h2 {
   .app-shell .topbar,
   .app-shell .filebar,
   .app-shell .crop-action-bar { background: #241d1a; }
-  .app-shell button:not(.primary),
+  .app-shell button:not(.primary):not(.preview-back),
   .app-shell .button { color: var(--ink); background: rgba(255,255,255,.07); }
+  .app-shell .preview-toolbar .preview-back {
+    background: #fff;
+    color: #241b18;
+    border-color: rgba(36, 27, 24, .16);
+    opacity: 1;
+  }
   .app-shell .range > span,
   .app-shell .toggle,
   .app-shell .color { color: var(--muted); }
@@ -1563,3 +1640,66 @@ h2 {
     transition: none !important;
   }
 }
+
+/* ---- production landing page: approved Soft Studio direction ---- */
+.landing {
+  --landing-ink: #19161d;
+  --landing-muted: #5f5965;
+  --landing-canvas: #f7f7f5;
+  --landing-surface: #fff;
+  --landing-line: rgba(33, 25, 40, .11);
+  min-height: 100%; height: 100%; overflow: auto; color: var(--landing-ink);
+  background: var(--landing-canvas); font-family: "Instrument Sans", sans-serif;
+  font-feature-settings: "ss01" 1, "ss02" 1; scroll-behavior: smooth;
+}
+.landing *, .landing *::before, .landing *::after { box-sizing: border-box; }
+.landing-ambient { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; background: var(--landing-canvas); }
+.landing-ambient::before, .landing-ambient::after { content: ""; position: absolute; width: 70vmax; height: 70vmax; filter: blur(35px); opacity: .14; border-radius: 46% 54% 62% 38% / 45% 38% 62% 55%; }
+.landing-ambient::before { top: -31vmax; left: -22vmax; background: radial-gradient(circle, rgba(255,140,23,.32), transparent 68%); }
+.landing-ambient::after { right: -28vmax; bottom: -36vmax; background: radial-gradient(circle, rgba(185,167,239,.32), transparent 70%); }
+.landing-shell { position: relative; z-index: 1; width: min(1440px, calc(100% - 48px)); margin: 0 auto; padding: 24px 0 72px; }
+.landing-topbar { position: sticky; top: 16px; z-index: 10; min-height: 68px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 10px 12px 10px 18px; border: 1px solid var(--landing-line); border-radius: 20px; background: rgba(255,255,255,.93); box-shadow: 0 8px 30px rgba(40,31,24,.06); backdrop-filter: blur(18px); }
+.landing-brand { display: inline-flex; align-items: center; gap: 11px; width: max-content; color: var(--landing-ink); text-decoration: none; font-weight: 680; letter-spacing: -.025em; }
+.landing-brand img { width: 36px; height: 36px; border-radius: 12px; box-shadow: 0 6px 18px rgba(25,22,29,.14); }
+.landing-topbar nav { display: flex; gap: 5px; }
+.landing-topbar nav a { padding: 10px 13px; color: var(--landing-muted); text-decoration: none; border-radius: 999px; font-size: 14px; }
+.landing-topbar nav a:hover { color: var(--landing-ink); background: #fff; }
+.landing-actions { justify-self: end; display: flex; gap: 8px; }
+.landing-primary, .landing-secondary, .landing-icon-button { min-height: 44px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--landing-line); padding: 0 20px; color: var(--landing-ink); background: #fff; font: 590 14px "Instrument Sans", sans-serif; text-decoration: none; cursor: pointer; transition: transform .25s cubic-bezier(.22,.8,.24,1), box-shadow .25s; }
+.landing-primary { border: 0; padding: 0 22px; color: #fff; background: linear-gradient(100deg, #ff3d0d, #ff6a1a 55%, #ff8c2a); box-shadow: 0 8px 20px rgba(255,84,17,.28); }
+.landing-primary:hover, .landing-secondary:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(49,37,63,.12); }
+.landing-icon-button { width: 44px; padding: 0; font-size: 18px; }
+.landing-hero { position: relative; overflow: hidden; min-height: 590px; display: grid; grid-template-columns: minmax(0,1.12fr) minmax(390px,.88fr); align-items: center; gap: clamp(36px,7vw,110px); margin-top: 24px; padding: clamp(76px,9vw,132px) clamp(10px,3vw,42px) 88px; border: 1px solid rgba(255,255,255,.56); border-radius: 42px; color: #19161d; background: radial-gradient(ellipse at 8% 38%,#ffd4a8 0 16%,transparent 45%), radial-gradient(ellipse at 30% 78%,#ff8c17 0 18%,transparent 46%), radial-gradient(ellipse at 56% 18%,#ffc7a1 0 15%,transparent 43%), radial-gradient(ellipse at 78% 58%,#b9a7ef 0 17%,transparent 45%), radial-gradient(ellipse at 96% 92%,#a9cfff 0 18%,transparent 48%), linear-gradient(112deg,#ffd4a8 0%,#ff8c17 34%,#ffc7a1 58%,#b9a7ef 78%,#a9cfff 100%); box-shadow: 0 16px 48px rgba(32,25,20,.07); }
+.landing-eyebrow, .landing-heading > div > span, .landing-workflow > span { font: 500 11px "IBM Plex Mono", monospace; letter-spacing: .1em; text-transform: uppercase; }
+.landing-eyebrow::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: #ff8c17; }
+.landing-hero h1 { margin: 24px 0; font: 610 clamp(56px,7.9vw,118px)/.91 "Instrument Sans", sans-serif; letter-spacing: -.072em; }
+.landing-hero p { max-width: 610px; margin: 0; color: rgba(25,22,29,.72); font-size: clamp(18px,1.8vw,24px); line-height: 1.42; letter-spacing: -.022em; }
+.landing-hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 32px; }
+.landing-hero-visual { display: grid; place-items: center; }
+.landing-tile-grid { width: min(420px,100%); display: grid; grid-template-columns: repeat(2,1fr); gap: 4px; padding: 10px; border-radius: 30px; background: rgba(255,255,255,.28); box-shadow: 0 24px 70px rgba(80,45,33,.18); }
+.landing-tile-grid img { width: 100%; aspect-ratio: 1; display: block; border-radius: 20px; background: #fff7ee; }
+.landing-trust { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; margin-top: 24px; overflow: hidden; border: 1px solid var(--landing-line); border-radius: 30px; background: var(--landing-line); }
+.landing-trust span { display: grid; gap: 7px; padding: 20px 24px; background: var(--landing-surface); color: var(--landing-muted); font: 10px "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .08em; }
+.landing-trust b { color: var(--landing-ink); font-weight: 500; }
+.landing-section { margin-top: 24px; padding: clamp(34px,5vw,72px); border: 1px solid var(--landing-line); border-radius: 42px; background: var(--landing-surface); box-shadow: 0 16px 48px rgba(32,25,20,.07); }
+.landing-heading { display: grid; grid-template-columns: .65fr 1.35fr; gap: 40px; align-items: end; margin-bottom: 46px; }
+.landing-heading h2, .landing-cta h2 { margin: 8px 0 0; font: 610 clamp(38px,4.6vw,70px)/.96 "Instrument Sans", sans-serif; letter-spacing: -.055em; }
+.landing-heading p { max-width: 650px; justify-self: end; margin: 0; color: var(--landing-muted); font-size: 17px; line-height: 1.55; }
+.landing-workflows { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
+.landing-workflow { position: relative; min-height: 370px; display: flex; flex-direction: column; align-items: flex-start; padding: 26px; overflow: hidden; border: 1px solid var(--landing-line); border-radius: 30px; background: #fff; color: var(--landing-ink); text-align: left; cursor: pointer; transition: transform .3s cubic-bezier(.22,.8,.24,1), box-shadow .3s; }
+.landing-workflow:hover { transform: translateY(-6px); box-shadow: 0 22px 56px rgba(32,25,20,.11); }
+.landing-workflow i { position: absolute; top: 22px; right: 22px; width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--landing-line); border-radius: 50%; background: #fff; font-style: normal; }
+.landing-workflow h3 { margin: 18px 0 8px; font-size: 30px; letter-spacing: -.045em; }
+.landing-workflow p { max-width: 30ch; margin: 0; color: var(--landing-muted); line-height: 1.5; }
+.landing-diagram { width: 100%; min-height: 122px; display: grid; place-items: center; margin-top: auto; border-radius: 20px; background: linear-gradient(135deg,#fff8f1,#f5f1fb); }
+.landing-diagram svg { width: 100px; height: 100px; }
+.landing-gallery { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
+.landing-gallery figure { overflow: hidden; margin: 0; border: 1px solid var(--landing-line); border-radius: 20px; background: #fff; }
+.landing-swatch { display: block; width: 100%; aspect-ratio: 1; background: #fff7ee; }
+.landing-gallery figcaption { display: flex; justify-content: space-between; gap: 10px; padding: 14px 16px; }
+.landing-gallery b { font-size: 14px; }.landing-gallery small { color: var(--landing-muted); font: 10px "IBM Plex Mono",monospace; text-transform: uppercase; letter-spacing: .08em; }
+.landing-faq details { border-top: 1px solid var(--landing-line); }.landing-faq details:last-child { border-bottom: 1px solid var(--landing-line); }.landing-faq summary { padding: 20px 0; cursor: pointer; font-weight: 590; }.landing-faq details p { margin: -6px 0 20px; color: var(--landing-muted); }
+.landing-cta { margin-top: 24px; padding: clamp(50px,7vw,94px) 24px; border-radius: 42px; text-align: center; color: #19161d; background: linear-gradient(112deg,#ffd4a8,#ff8c17 34%,#ffc7a1 58%,#b9a7ef 78%,#a9cfff); }.landing-cta h2 { font-size: clamp(38px,5vw,68px); }.landing-cta p { margin: 14px 0 24px; }.landing-footer { display: flex; justify-content: space-between; gap: 20px; padding: 28px 10px 0; color: var(--landing-muted); font: 10px "IBM Plex Mono",monospace; text-transform: uppercase; letter-spacing: .08em; }
+.landing-dark { --landing-ink: #f8f2eb; --landing-muted: #c2b7ad; --landing-canvas: #151210; --landing-surface: #251f1c; --landing-line: rgba(255,239,224,.12); }.landing-dark .landing-topbar { background: rgba(31,27,24,.9); }.landing-dark .landing-secondary, .landing-dark .landing-icon-button { background: #fff; color: #19161d; }.landing-dark .landing-workflow, .landing-dark .landing-gallery figure { background: #2d2723; color: #f8f2eb; }.landing-dark .landing-workflow p, .landing-dark .landing-gallery small { color: #c2b7ad; }.landing-dark .landing-diagram { background: linear-gradient(135deg,#3a302b,#251f1c); }.landing-dark .landing-trust span { background: #251f1c; }.landing-dark .landing-trust b { color: #f8f2eb; }
+@media (max-width: 900px) { .landing-shell { width: min(100% - 24px,1440px); padding-top: 12px; }.landing-topbar { grid-template-columns: 1fr auto; top: 8px; }.landing-topbar nav { display: none; }.landing-hero { grid-template-columns: 1fr; padding: 84px 24px 54px; }.landing-hero h1 { font-size: clamp(48px,16vw,72px); }.landing-hero-visual { margin-top: 6px; }.landing-trust { grid-template-columns: repeat(2,1fr); }.landing-heading { grid-template-columns: 1fr; gap: 18px; margin-bottom: 30px; }.landing-heading p { justify-self: start; }.landing-workflows, .landing-gallery { grid-template-columns: 1fr; }.landing-section { padding: 30px 20px; border-radius: 30px; }.landing-workflow { min-height: 320px; }.landing-footer { flex-direction: column; }.landing-tile-grid { max-width: 340px; } }
+@media (prefers-reduced-motion: reduce) { .landing { scroll-behavior: auto; }.landing *, .landing *::before, .landing *::after { transition: none !important; } }
