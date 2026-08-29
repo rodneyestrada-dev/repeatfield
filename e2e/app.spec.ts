@@ -83,7 +83,7 @@ test("workflow isolation: no cross-workflow controls leak", async ({ page }) => 
 
   // Tessellate: no Tile Turn / Field Layout / Brick / Half-Drop
   await page.getByRole("button", { name: /Tessellate/ }).click();
-  await page.getByRole("tab", { name: "Assemble" }).click();
+  await page.getByRole("tab", { name: "Repeat" }).click();
   await expect(page.getByText("Tile Turn")).toHaveCount(0);
   await expect(page.getByText("Field Layout")).toHaveCount(0);
   await expect(page.getByText(/Brick/)).toHaveCount(0);
@@ -449,7 +449,7 @@ test("tessellate: bundled shape can be replaced, placed, diagnosed, and exported
   await expect(page.getByTestId("pattern-canvas")).toBeVisible();
   await page.getByLabel("Upload Primary image").setInputFiles(FIXTURE);
   await expect(page.getByTestId("pattern-canvas")).toBeVisible();
-  await page.getByRole("button", { name: "Assemble" }).click();
+  await page.getByRole("button", { name: "Repeat" }).click();
 
   // honest empty coverage
   await expect(page.getByTestId("coverage-status")).toContainText(
@@ -484,6 +484,7 @@ test("tessellate: bundled shape can be replaced, placed, diagnosed, and exported
   await page.getByRole("group", { name: "Output mode" }).getByRole("button", { name: "Medallion" }).click();
   await page.getByLabel("Export width").fill("256");
   await page.getByLabel("Export height").fill("256");
+  await page.getByLabel("Output", { exact: true }).getByRole("button", { name: "Preview" }).click();
   const dl = page.waitForEvent("download");
   await page.getByRole("button", { name: /Download transparent PNG/ }).click();
   const download = await dl;
@@ -500,12 +501,13 @@ test("large Tessellate field export covers far corners and matches preview sampl
   await freshStart(page);
   await page.getByRole("button", { name: /Tessellate/ }).click();
   await page.getByLabel("Upload Primary image").setInputFiles(FIXTURE);
-  await page.getByRole("button", { name: "Assemble" }).click();
+  await page.getByRole("button", { name: "Repeat" }).click();
   await page.getByRole("button", { name: "+ Add Primary" }).click();
   const previewData = await page.getByTestId("pattern-canvas").evaluate((c: HTMLCanvasElement) => c.toDataURL().split(",")[1]);
   const preview = PNG.sync.read(Buffer.from(previewData, "base64"));
   await page.getByLabel("Export width").fill("1200");
   await page.getByLabel("Export height").fill("900");
+  await page.getByLabel("Output", { exact: true }).getByRole("button", { name: "Preview" }).click();
   const exported = PNG.sync.read(await downloadBytes(page, /Download transparent PNG/));
   expect(exported.width).toBe(1200);
   expect(exported.height).toBe(900);
@@ -568,7 +570,7 @@ test("mobile layouts have no horizontal overflow in all three workflows", async 
 
   await page.getByRole("button", { name: /Tessellate/ }).click();
   expect(await overflow()).toBeLessThanOrEqual(390);
-  await page.getByRole("tab", { name: "Assemble" }).click();
+  await page.getByRole("tab", { name: "Repeat" }).click();
   expect(await overflow()).toBeLessThanOrEqual(390);
 });
 
@@ -603,6 +605,6 @@ test("workflow stages without a filebar still occupy the full editor row", async
   await page.getByRole("button", { name: /Tessellate/ }).click();
   await expect(page.getByTestId("pattern-canvas")).toBeVisible();
   expect((await page.getByTestId("pattern-canvas").boundingBox())!.width).toBeGreaterThan(300);
-  await page.getByRole("tab", { name: "Assemble" }).click();
+  await page.getByRole("tab", { name: "Repeat" }).click();
   expect((await page.locator("main.repeat-workspace").boundingBox())!.height).toBeGreaterThan(700);
 });

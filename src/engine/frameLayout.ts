@@ -20,6 +20,7 @@ export interface FrameLayoutInput {
   borderAlternate: boolean;
   borderReverse: boolean;
   cornerBaseRotation: TileRotation;
+  fieldRotation: TileRotation;
   cornerOverrides: Partial<Record<FrameCorner, TileRotation>>;
 }
 
@@ -63,6 +64,7 @@ export function computeFrameLayout(input: FrameLayoutInput): TilePlacement[] {
     borderAlternate,
     borderReverse,
     cornerBaseRotation,
+    fieldRotation,
     cornerOverrides,
   } = input;
   const placements: TilePlacement[] = [];
@@ -74,7 +76,7 @@ export function computeFrameLayout(input: FrameLayoutInput): TilePlacement[] {
         role: "field",
         x: inset + column * tileSize,
         y: inset + row * tileSize,
-        rotation: 0,
+        rotation: fieldRotation,
       });
 
   if (!borderEnabled) return placements;

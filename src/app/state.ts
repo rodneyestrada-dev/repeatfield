@@ -220,6 +220,7 @@ export interface TileSetComposition {
   borderAlternate: boolean;
   borderReverse: boolean;
   cornerBaseRotation: TileRotation;
+  fieldRotation: TileRotation;
   cornerOverrides: Partial<Record<FrameCorner, TileRotation>>;
   viewMode: TileSetView;
   groutWidth: number;
@@ -235,6 +236,7 @@ export const DEFAULT_TILE_SET_COMPOSITION: TileSetComposition = {
   borderAlternate: false,
   borderReverse: false,
   cornerBaseRotation: 0,
+  fieldRotation: 0,
   cornerOverrides: {},
   viewMode: "set",
   groutWidth: 2,
@@ -595,19 +597,43 @@ function pushHistory<T>(history: { past: T[]; future: T[] }, snapshot: T) {
   };
 }
 
+const MIN_SPAN = 0.01;
+
 function reduceCrop(crop: CropState, action: CropAction): CropState {
   switch (action.type) {
     case "crop-set-corner": {
+      // Rect-preserving resize: the opposite corner stays anchored and the
+      // two adjacent corners follow the drag, so the selection can grow or
+      // shrink in x and y but never skews out of its square/rectangle shape.
       const selectionQuad = copyQuad(crop.selectionQuad) as unknown as [
         Point,
         Point,
         Point,
         Point,
       ];
-      selectionQuad[action.index] = {
-        x: clamp01(action.point.x),
-        y: clamp01(action.point.y),
+      const index = ((action.index % 4) + 4) % 4;
+      const opposite = selectionQuad[(index + 2) % 4];
+      const previous = selectionQuad[index];
+      const sameSide = (value: number, anchor: number, before: number) => {
+        const forward = before >= anchor;
+        return forward
+          ? Math.max(value, anchor + MIN_SPAN)
+          : Math.min(value, anchor - MIN_SPAN);
       };
+      const point = {
+        x: sameSide(clamp01(action.point.x), opposite.x, previous.x),
+        y: sameSide(clamp01(action.point.y), opposite.y, previous.y),
+      };
+      selectionQuad[index] = point;
+      // Even indices (TL/BR) drag the top-left/bottom-right diagonal; the
+      // neighbours keep the opposite corner's coordinate on the shared axis.
+      if (index % 2 === 0) {
+        selectionQuad[(index + 1) % 4] = { x: opposite.x, y: point.y };
+        selectionQuad[(index + 3) % 4] = { x: point.x, y: opposite.y };
+      } else {
+        selectionQuad[(index + 1) % 4] = { x: point.x, y: opposite.y };
+        selectionQuad[(index + 3) % 4] = { x: opposite.x, y: point.y };
+      }
       if (!isValidEditableQuad(selectionQuad)) return crop;
       return { ...crop, selectionQuad };
     }

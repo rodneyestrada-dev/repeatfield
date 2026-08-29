@@ -384,7 +384,7 @@ function ShapesStage({
                 className="primary continue"
                 onClick={() => dispatch({ type: "set-stage", stage: "assemble" })}
               >
-                Assemble
+                Repeat
               </button>
             </div>
           </div>
@@ -404,7 +404,7 @@ function ShapesStage({
                     dispatch({ type: "set-stage", stage: "assemble" })
                   }
                 >
-                  Assemble
+                  Repeat
                 </button>
               </div>
             )}
@@ -537,8 +537,9 @@ function AssembleStage({
             {(
               [
                 ["shapes", "Shapes"],
-                ["assemble", "Assemble"],
+                ["assemble", "Repeat"],
                 ["verify", "Verify"],
+                ["preview", "Preview"],
               ] as const
             ).map(([id, name]) => (
               <button
@@ -873,8 +874,13 @@ function AssembleStage({
               }
             />
           </label>
-          <button className="primary" onClick={download}>
-            Download transparent PNG ↗
+          <button
+            className="primary"
+            onClick={() => project.stage === "preview"
+              ? download()
+              : dispatch({ type: "set-stage", stage: "preview" })}
+          >
+            {project.stage === "preview" ? "Download transparent PNG ↗" : "Preview"}
           </button>
         </section>
         <section>

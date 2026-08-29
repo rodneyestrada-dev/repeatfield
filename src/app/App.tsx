@@ -278,11 +278,13 @@ const STAGE_LABELS: Record<WorkflowKind, [string, string][]> = {
   "tile-set": [
     ["tiles", "Tiles"],
     ["compose", "Compose Set"],
+    ["preview", "Preview"],
   ],
   tessellate: [
     ["shapes", "Shapes"],
-    ["assemble", "Assemble"],
+    ["assemble", "Repeat"],
     ["verify", "Verify"],
+    ["preview", "Preview"],
   ],
 };
 

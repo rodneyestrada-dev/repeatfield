@@ -402,6 +402,7 @@ export function renderTileSetComposition(
     borderAlternate: composition.borderAlternate,
     borderReverse: composition.borderReverse,
     cornerBaseRotation: composition.cornerBaseRotation,
+    fieldRotation: composition.fieldRotation,
     cornerOverrides: composition.cornerOverrides,
   });
   const columns = composition.fieldColumns + (borderOn ? 2 : 0);

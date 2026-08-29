@@ -276,7 +276,7 @@ test("tessellate coverage panel reports honestly when nothing is placed", () => 
   render(<App />);
   fireEvent.click(screen.getByRole("button", { name: /Tessellate/ }));
   // jump to assemble stage
-  fireEvent.click(screen.getByRole("tab", { name: "Assemble" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Repeat" }));
   expect(screen.getByTestId("coverage-status")).toHaveTextContent(
     /place at least one shape/i,
   );

@@ -10,13 +10,18 @@ const base = {
   borderAlternate: false,
   borderReverse: false,
   cornerBaseRotation: 0 as const,
+  fieldRotation: 0 as const,
   cornerOverrides: {},
 };
 
+test("field base rotation applies uniformly to every interior tile", () => {
+  const placements = computeFrameLayout({ ...base, fieldRotation: 90 });
+  expect(placements.filter((p) => p.role === "field").map((p) => p.rotation)).toEqual([90, 90, 90, 90]);
+});
+
 test("a 2x2 interior with a full frame yields 4 field, 8 border, 4 corner tiles", () => {
   const placements = computeFrameLayout(base);
-  const count = (role: string) =>
-    placements.filter((p) => p.role === role).length;
+  const count = (role: string) => placements.filter((p) => p.role === role).length;
   expect(count("field")).toBe(4);
   expect(count("border")).toBe(8);
   expect(count("corner")).toBe(4);

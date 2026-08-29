@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Repeatfield — Workflow UX v2 plan (awaiting go)</title>
+<style>
+:root{--orange:#ff8c17;--ink:#241b18;--muted:#70645b;--line:#e6d8cd;--paper:#f7f2ec;font-family:Instrument Sans,Inter,system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink)}
+.page{max-width:1080px;margin:auto;padding:38px 26px 80px}
+.tag{display:inline-block;padding:5px 10px;margin-right:7px;border-radius:99px;font:700 10px ui-monospace,monospace;letter-spacing:.08em;background:#ffead7;color:#864300}
+h1{font-size:29px;letter-spacing:-.03em;margin:12px 0 6px}
+h2{font-size:20px;margin:0 0 6px;letter-spacing:-.02em}
+h3{font-size:15px;margin:0 0 6px}
+.sub{color:var(--muted);margin:0 0 26px;line-height:1.5}
+.card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:24px;margin:18px 0}
+.meta{color:var(--muted);font-size:14px;line-height:1.55;margin:8px 0}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+th,td{padding:10px 8px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+code{background:#f4ede6;padding:1px 5px;border-radius:5px;font-size:.92em}
+.flow{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}
+.step{border:1px solid var(--line);border-radius:16px;padding:15px;background:#fff}
+.step b{display:block;color:#9a4800;font:700 10px ui-monospace,monospace;letter-spacing:.07em;margin-bottom:7px}
+.step p{font-size:12.5px;color:var(--muted);line-height:1.45;margin:0}
+.crop-demo{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.crop-pane{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#fff}
+.crop-pane .banner{padding:9px 13px;font:700 10.5px ui-monospace,monospace;letter-spacing:.07em;border-bottom:1px solid var(--line)}
+.crop-pane .bad{background:#ffe9e2;color:#b3261e}.crop-pane .good{background:#e4f5e9;color:#126d37}
+.crop-pane svg{display:block;width:100%;background:#fff}
+.cta{display:inline-block;min-height:38px;line-height:38px;padding:0 18px;border-radius:999px;background:linear-gradient(100deg,#ff3d0d,#ff6a1a 52%,#ff8c2a);color:#fff;font-weight:700;font-size:13px}
+.verify{border-left:4px solid #36a960;background:#f0fbf3;padding:12px 14px;border-radius:7px;font-size:13px;color:#245837;margin-top:16px}
+@media(max-width:720px){.flow{grid-template-columns:1fr}.crop-demo{grid-template-columns:1fr}}
+</style>
+</head>
+<body><main class="page">
+<span class="tag">PLAN STAGE — NO BUILD YET</span>
+<h1>Workflow UX v2 — same spine, three natures</h1>
+<p class="sub">Investigated against the live code (CropWorkspace.tsx · state.ts · TileSetEditor.tsx · TessellateEditor.tsx). Four work items below; nothing is implemented until you say go.</p>
+
+<section class="card">
+<h2>1 · Crop corners keep the shape square</h2>
+<p class="meta"><b>Now:</b> dragging a corner moves only that point — the quad collapses into a trapezoid (<code>crop-set-corner</code> in <code>state.ts:600</code> writes a single vertex, adjacent corners never follow).<br>
+<b>Proposed:</b> dragging a corner <b>resizes</b> the rectangle: the two adjacent corners slide with it, so width AND height grow/shrink together and the selection stays a true square/rectangle — never distorted. Aspect lock toggle (default: square). Edge midpoints resize one axis. Translation drag unchanged.</p>
+<div class="crop-demo">
+<div class="crop-pane"><div class="banner bad">NOW — corner drag skews the quad</div>
+<svg viewBox="0 0 320 200"><rect x="20" y="20" width="280" height="160" fill="#f6ede4"/><polygon points="60,50 210,30 190,150 80,170" fill="rgba(255,140,23,.14)" stroke="#c7551a" stroke-width="2.5"/><circle cx="60" cy="50" r="7" fill="#fff" stroke="#c7551a" stroke-width="3"/><circle cx="210" cy="30" r="7" fill="#fff" stroke="#c7551a" stroke-width="3"/><circle cx="190" cy="150" r="7" fill="#fff" stroke="#c7551a" stroke-width="3"/><circle cx="80" cy="170" r="7" fill="#fff" stroke="#c7551a" stroke-width="3"/><path d="M210,30 L262,52" stroke="#b3261e" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#a)"/><defs><marker id="a" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0,0L7,3.5L0,7z" fill="#b3261e"/></marker></defs></svg></div>
+<div class="crop-pane"><div class="banner good">PROPOSED — adjacent corners follow; square preserved</div>
+<svg viewBox="0 0 320 200"><rect x="20" y="20" width="280" height="160" fill="#f6ede4"/><polygon points="60,50 240,50 240,150 60,150" fill="rgba(255,140,23,.14)" stroke="#ff8c24" stroke-width="2.5"/><circle cx="60" cy="50" r="7" fill="#fff" stroke="#c7551a" stroke-width="3"/><circle cx="240" cy="50" r="7" fill="#fff" stroke="#c7551a" stroke-width="3"/><circle cx="240" cy="150" r="7" fill="#fff" stroke="#c7551a" stroke-width="3"/><circle cx="60" cy="150" r="7" fill="#fff" stroke="#c7551a" stroke-width="3"/><path d="M150,50 L190,50" stroke="#126d37" stroke-width="2" stroke-dasharray="4 3"/><path d="M240,100 L240,124" stroke="#126d37" stroke-width="2" stroke-dasharray="4 3"/></svg></div>
+</div>
+<p class="meta">Applies to Field Tile and Tile Set crop stages (shared <code>CropWorkspace</code>). Warp pins keep their free-form behavior — that is their job.</p>
+</section>
+
+<section class="card">
+<h2>2 · Tile Set Compose gets full native edit options</h2>
+<p class="meta"><b>Now:</b> Compose inspector has Frame / Edge Run phase / Corner base rotation / Set Look / Grout — but no tile rotation for field or edge tiles, and no universal controls.<br>
+<b>Proposed additions to the Compose inspector:</b></p>
+<table><thead><tr><th>Option</th><th>Scope</th><th>Control</th></tr></thead><tbody>
+<tr><td><b>Tile Turn</b> (per-tile rotate 90°, reflect H/V)</td><td>Field interior tiles</td><td>Same 2×2 turn grid component as Field Tile workflow</td></tr>
+<tr><td>Edge alternate rotation · reverse direction</td><td>Edge tiles (exists — surface it next to the new turn grid)</td><td>Existing toggles, regrouped</td></tr>
+<tr><td><b>Tile scale</b> · <b>Gap</b></td><td>Universal — Field + Edge + Corner together</td><td>Shared sliders (one value drives all roles)</td></tr>
+<tr><td>Background color</td><td>Universal</td><td>Color picker</td></tr>
+</tbody></table>
+</section>
+
+<section class="card">
+<h2>3 · Preview step after Compose — all three workflows</h2>
+<p class="meta">Every workflow ends the same way: edit → <b>Preview</b> → download. No direct download from an edit surface anymore.</p>
+<div class="flow">
+<article class="step"><b>FIELD TILE</b><h3>Crop → Repeat → <u>Preview ✓</u></h3><p>Already has Preview. Download moves exclusively to it (Repeat inspector’s direct Download control is removed).</p></article>
+<article class="step"><b>TILE SET</b><h3>Tiles → Compose → <b>Preview (new)</b></h3><p>New final stage: full-frame preview with framing (square/portrait/landscape), W/H fields, and the single <span class="cta">Download</span>. Compose keeps editing controls; its Export section is removed.</p></article>
+<article class="step"><b>TESSELLATE</b><h3>Shapes → Assemble → <b>Preview (new)</b></h3><p>Same pattern: Verify keeps diagnostics; export moves to a new Preview stage with the shared download bar.</p></article>
+</div>
+<p class="meta" style="margin-top:12px">Stage tabs update to show Preview on all three; the shared preview toolbar (solid-white Back · frame select · W/H · Download) is reused everywhere.</p>
+</section>
+
+<section class="card">
+<h2>4 · Tessellate: renamed and reframed as “non-square repeat”</h2>
+<p class="meta"><b>Now:</b> Shapes → Assemble → Verify reads like a shape-fitting puzzle; there are no repeat-pattern options and no repeat surface.<br>
+<b>Proposed:</b> same spine as the others — the difference is only the source tile’s nature:</p>
+<div class="flow">
+<article class="step"><b>SOURCE</b><h3>Shape (was Shapes)</h3><p>Crop + background removal — identical tools to the other workflows. A quarter-circle transparent shape is the bundled demo.</p></article>
+<article class="step"><b>REPEAT</b><h3>Repeat (new stage, was Assemble)</h3><p>The shape auto-tessellates as a repeat (e.g. 4 rotations of the quarter-circle interlock into a full circle). Repeat options arrive here: layout (straight / brick / half-drop), scale, gap, turn grid.</p></article>
+<article class="step"><b>CHECK + OUT</b><h3>Verify → Preview</h3><p>Verify keeps coverage diagnostics; Preview ends the flow with export.</p></article>
+</div>
+<p class="meta" style="margin-top:12px">Copy update across the app: Tessellate is described as the <b>complex / non-square source</b> path — one mental model, three source natures: simple square (Field), 3-role set (Tile Set), non-square shape (Tessellate).</p>
+</section>
+
+<section class="card">
+<h2>Scope of the build (on your go)</h2>
+<table><thead><tr><th>#</th><th>Change</th><th>Files</th><th>Risk</th></tr></thead><tbody>
+<tr><td>1</td><td>Corner-drag resizes rect (adjacent corners follow); aspect-lock; edge handles</td><td><code>CropWorkspace.tsx</code>, <code>state.ts</code> (new resize action), tests</td><td>Medium — core interaction; guarded by unit geometry tests + e2e drag regression</td></tr>
+<tr><td>2</td><td>Compose inspector: Tile Turn grid, universal scale/gap/background</td><td><code>TileSetEditor.tsx</code>, <code>state.ts</code> (composition fields), renderer</td><td>Medium — renderer changes for per-tile turn + universal gap</td></tr>
+<tr><td>3</td><td>Preview stage for Tile Set + Tessellate; single download surface</td><td><code>TileSetEditor.tsx</code>, <code>TessellateEditor.tsx</code>, <code>state.ts</code>, e2e</td><td>Low — pattern already exists in Field Tile</td></tr>
+<tr><td>4</td><td>Tessellate reframe: rename stages, add Repeat options stage</td><td><code>TessellateEditor.tsx</code>, <code>state.ts</code>, landing copy, e2e</td><td>Medium — stage machine change; existing tessellate e2e updated</td></tr>
+</tbody></table>
+<div class="verify"><b>Build-phase verification:</b> full unit suite · full Playwright suite · production build · fresh screenshots of every stage in all three workflows · crop-drag geometry regression (drag corner → assert quad stays rectangular).</div>
+</section>
+</main></body></html>

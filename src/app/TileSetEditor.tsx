@@ -148,6 +148,16 @@ export function TileSetEditor({
       </>
     );
 
+  if (project.stage === "preview")
+    return (
+      <TileSetPreviewStage
+        project={project}
+        dispatch={dispatch}
+        roleTiles={roleTiles}
+        missingRoles={missingRoles}
+      />
+    );
+
   return (
     <ComposeStage
       project={project}
@@ -177,7 +187,6 @@ function ComposeStage({
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [dims, setDims] = useState({ width: 1080, height: 1080 });
-  const [exportError, setExportError] = useState("");
   const composition = project.composition;
   const setComposition = (
     key: keyof TileSetProject["composition"],
@@ -210,30 +219,6 @@ function ComposeStage({
     return () => ro.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project]);
-
-  const download = () => {
-    const tiles = roleTiles();
-    if (missingRoles.length || !tiles.field || !tiles.border || !tiles.corner) {
-      setExportError("Field, Edge, and Corner assets are required before export.");
-      return;
-    }
-    const valid = validateExport(dims.width, dims.height);
-    const canvas = document.createElement("canvas");
-    canvas.width = valid.width;
-    canvas.height = valid.height;
-    renderTileSetComposition(
-      canvas.getContext("2d")!,
-      tiles,
-      composition,
-      project.setLook,
-      valid.width,
-      valid.height,
-    );
-    downloadCanvas(
-      canvas,
-      exportFilename("tile-set", valid.width, valid.height),
-    );
-  };
 
   return (
     <main className="repeat-workspace">
@@ -339,6 +324,15 @@ function ComposeStage({
                 90° transition.
               </p>
             )}
+        </section>
+        <section aria-label="Tile turns">
+          <h3>Tile turns</h3>
+          <p className="tool-note">Apply a shared base rotation across each role in this set.</p>
+          <div className="segments" role="group" aria-label="Field rotation">
+            {([0, 90, 180, 270] as const).map((rotation) => (
+              <button key={rotation} className={composition.fieldRotation === rotation ? "on" : ""} aria-pressed={composition.fieldRotation === rotation} onClick={() => setComposition("fieldRotation", rotation)}>{rotation}°</button>
+            ))}
+          </div>
         </section>
         <section aria-label="Edge Run">
           <h3>Edge Run</h3>
@@ -467,14 +461,69 @@ function ComposeStage({
               }
             />
           </label>
-          {exportError && <p className="warning" role="alert">{exportError}</p>}
-          <button className="primary" disabled={missingRoles.length > 0} onClick={download}>
-            Download PNG ↗
+          <button
+            className="primary"
+            disabled={missingRoles.length > 0}
+            onClick={() => dispatch({ type: "set-stage", stage: "preview" })}
+          >
+            Preview
           </button>
         </section>
       </aside>
     </main>
   );
+}
+
+function TileSetPreviewStage({
+  project,
+  dispatch,
+  roleTiles,
+  missingRoles,
+}: {
+  project: TileSetProject;
+  dispatch: (action: Action) => void;
+  roleTiles: () => { field: HTMLCanvasElement | null; border: HTMLCanvasElement | null; corner: HTMLCanvasElement | null };
+  missingRoles: TileRole[];
+}) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const [dims, setDims] = useState({ width: 1080, height: 1080 });
+  const [exportError, setExportError] = useState("");
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const paint = () => {
+      const bounds = canvas.getBoundingClientRect();
+      const dpr = Math.min(devicePixelRatio || 1, 2);
+      canvas.width = Math.max(1, Math.round(bounds.width * dpr));
+      canvas.height = Math.max(1, Math.round(bounds.height * dpr));
+      const context = canvas.getContext("2d");
+      if (!context) return;
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      renderTileSetComposition(context, roleTiles(), project.composition, project.setLook, bounds.width, bounds.height);
+    };
+    paint();
+    const observer = new ResizeObserver(paint);
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [project, roleTiles]);
+  const download = () => {
+    const tiles = roleTiles();
+    if (missingRoles.length || !tiles.field || !tiles.border || !tiles.corner) {
+      setExportError("Field, Edge, and Corner assets are required before export.");
+      return;
+    }
+    const valid = validateExport(dims.width, dims.height);
+    const canvas = document.createElement("canvas");
+    canvas.width = valid.width;
+    canvas.height = valid.height;
+    renderTileSetComposition(canvas.getContext("2d")!, tiles, project.composition, project.setLook, valid.width, valid.height);
+    downloadCanvas(canvas, exportFilename("tile-set", valid.width, valid.height));
+  };
+  return <main className="repeat-workspace">
+    <aside className="preset-rail"><span className="eyebrow">TILE SET</span><h1>Preview</h1><p>Review the complete Field · Edge · Corner set before export.</p><button onClick={() => dispatch({ type: "set-stage", stage: "compose" })}>← Back</button></aside>
+    <section className="field-stage"><canvas ref={ref} data-testid="pattern-canvas" /><div className="field-hint">READY TO EXPORT</div></section>
+    <aside className="inspector"><div className="inspector-head"><h2>Export set</h2></div><section aria-label="Export"><label>W <input aria-label="Export width" type="number" min="64" max="6000" value={dims.width} onChange={(e) => setDims({ ...dims, width: Number(e.target.value) })}/></label><label>H <input aria-label="Export height" type="number" min="64" max="6000" value={dims.height} onChange={(e) => setDims({ ...dims, height: Number(e.target.value) })}/></label>{exportError && <p className="warning" role="alert">{exportError}</p>}<button className="primary" disabled={missingRoles.length > 0} onClick={download}>Download PNG ↗</button></section></aside>
+  </main>;
 }
 
 function CornerOverrides({

@@ -182,15 +182,64 @@ test("moving the selection never alters warp state and vice versa", () => {
   expect(crop.selectionQuad[0]).toEqual({ x: 0.3, y: 0.3 });
 });
 
+test("crop corner drag resizes as a rectangle: adjacent corners follow, shape never skews", () => {
+  let s = fieldTile();
+  // Drag TL toward the centre: BR stays anchored; TR/BL keep square corners.
+  s = appReducer(s, {
+    type: "crop-set-corner",
+    index: 0,
+    point: { x: 0.3, y: 0.35 },
+  });
+  const quad = (s.project as FieldTileProject).crop.selectionQuad;
+  expect(quad[0]).toEqual({ x: 0.3, y: 0.35 });   // dragged corner
+  expect(quad[2]).toEqual({ x: 0.88, y: 0.88 });  // opposite stays anchored
+  expect(quad[1]).toEqual({ x: 0.88, y: 0.35 });  // adjacent follows on y
+  expect(quad[3]).toEqual({ x: 0.3, y: 0.88 });   // adjacent follows on x
+  // Rectangularity invariant: sides stay axis-parallel.
+  expect(quad[1].y).toBe(quad[0].y);
+  expect(quad[3].x).toBe(quad[0].x);
+  // A second drag of an adjacent corner keeps the rectangle too.
+  s = appReducer(s, {
+    type: "crop-set-corner",
+    index: 1,
+    point: { x: 0.7, y: 0.4 },
+  });
+  const q2 = (s.project as FieldTileProject).crop.selectionQuad;
+  expect(q2[1]).toEqual({ x: 0.7, y: 0.4 });
+  expect(q2[0]).toEqual({ x: 0.3, y: 0.4 });      // TL follows on y
+  expect(q2[3]).toEqual({ x: 0.3, y: 0.88 });
+  expect(q2[2]).toEqual({ x: 0.7, y: 0.88 });     // BR follows on x
+});
+
+test("crop corner drag clamps against the opposite corner (no collapse or flip)", () => {
+  let s = fieldTile();
+  s = appReducer(s, {
+    type: "crop-set-corner",
+    index: 2,
+    point: { x: 0.13, y: 0.9 },
+  });
+  const quad = (s.project as FieldTileProject).crop.selectionQuad;
+  // BR dragged past TL on x: pinned at MIN_SPAN beside the anchor.
+  expect(quad[2].x).toBeCloseTo(0.13);
+  expect(quad[2].x - quad[0].x).toBeGreaterThanOrEqual(0.009);
+  expect(quad[1].x).toBe(quad[2].x);
+  expect(quad[3].x).toBe(quad[0].x);
+});
+
 test.each([
-  ["crossed", { x: 0.95, y: 0.95 }],
-  ["near-zero-area", { x: 0.879999, y: 0.120001 }],
-  ["non-convex", { x: 0.5, y: 0.5 }],
-])("crop rejects %s corner edits and preserves the last valid quad", (_name, point) => {
+  ["past the opposite corner", { x: 0.95, y: 0.95 }],
+  ["near the opposite corner", { x: 0.879999, y: 0.120001 }],
+  ["inside the existing rectangle", { x: 0.5, y: 0.5 }],
+])("crop corner drag %s remains an axis-aligned non-zero rectangle", (_name, point) => {
   const state = fieldTile();
-  const before = (state.project as FieldTileProject).crop.selectionQuad;
   const next = appReducer(state, { type: "crop-set-corner", index: 0, point });
-  expect((next.project as FieldTileProject).crop.selectionQuad).toEqual(before);
+  const [tl, tr, br, bl] = (next.project as FieldTileProject).crop.selectionQuad;
+  expect(tr.y).toBe(tl.y);
+  expect(bl.x).toBe(tl.x);
+  expect(br.x).toBe(tr.x);
+  expect(br.y).toBe(bl.y);
+  expect(Math.abs(br.x - tl.x)).toBeGreaterThanOrEqual(0.009);
+  expect(Math.abs(br.y - tl.y)).toBeGreaterThanOrEqual(0.009);
 });
 
 test("warp rejects crossed and singular pin edits and preserves the last valid quad", () => {
