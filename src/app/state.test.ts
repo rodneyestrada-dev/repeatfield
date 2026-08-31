@@ -509,6 +509,17 @@ test("primary and infill shape slots stay independent", () => {
   expect(project.shapes.infill.backgroundRemoval.tolerance).toBe(28);
 });
 
+test("Quick remove has explicit mode state and reset returns to original alpha", () => {
+  let s = tessellate();
+  s = appReducer(s, { type: "shape-removal-mode", shape: "primary", mode: "quick" });
+  s = appReducer(s, { type: "shape-background", shape: "primary", key: "color", value: "#123456" });
+  s = appReducer(s, { type: "shape-background", shape: "primary", key: "tolerance", value: 60 });
+  s = appReducer(s, { type: "reset-quick-remove", shape: "primary" });
+  const shape = (s.project as TessellateProject).shapes.primary;
+  expect(shape.removalMode).toBe("keep");
+  expect(shape.backgroundRemoval).toEqual({ enabled: false, color: "#ffffff", tolerance: 28, feather: 12 });
+});
+
 test("instances can be added, transformed, duplicated conceptually, and removed", () => {
   let s = tessellate();
   s = appReducer(s, {

@@ -29,7 +29,7 @@ function useShapeCanvas(
     canvas.height = img.naturalHeight;
     const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
     ctx.drawImage(img, 0, 0);
-    if (slot.backgroundRemoval.enabled) {
+    if (slot.removalMode === "quick" && slot.backgroundRemoval.enabled) {
       const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
       image.data.set(
         applyAlphaMask(
@@ -43,6 +43,21 @@ function useShapeCanvas(
     }
     return canvas;
   }, [img, slot]);
+}
+
+function useSourceHasAlpha(img: HTMLImageElement | null) {
+  return useMemo(() => {
+    if (!img) return false;
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) return false;
+    context.drawImage(img, 0, 0);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let i = 3; i < pixels.length; i += 4) if (pixels[i] < 255) return true;
+    return false;
+  }, [img]);
 }
 
 let instanceCounter = 0;
@@ -112,6 +127,7 @@ function ShapesStage({
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const slot = project.shapes[activeShape];
+  const sourceHasAlpha = useSourceHasAlpha(images[activeShape]);
   const canvas = canvases[activeShape];
   useEffect(() => {
     const c = ref.current;
@@ -233,6 +249,7 @@ function ShapesStage({
                     className="crop-canvas"
                     data-testid="pattern-canvas"
                     onClick={(e) => {
+                      if (slot.removalMode !== "quick") return;
                       const img = images[activeShape];
                       if (!img) return;
                       const bounds = e.currentTarget.getBoundingClientRect();
@@ -288,73 +305,28 @@ function ShapesStage({
               </section>
               <aside className="crop-side">
                 <div className="crop-guide">
-                  <span className="eyebrow">REMOVE BACKGROUND</span>
-                  <h2>Click the background color to make it transparent.</h2>
+                  <span className="eyebrow">BACKGROUND</span>
+                  <h2>Choose how this shape keeps or removes its background.</h2>
                 </div>
-                <label className="color">
-                  Sampled color{" "}
-                  <input
-                    aria-label="Background color"
-                    type="color"
-                    value={slot.backgroundRemoval.color}
-                    onChange={(e) => {
-                      dispatch({
-                        type: "shape-background",
-                        shape: activeShape,
-                        key: "color",
-                        value: e.target.value,
-                      });
-                      dispatch({
-                        type: "shape-background",
-                        shape: activeShape,
-                        key: "enabled",
-                        value: true,
-                      });
-                    }}
-                  />
-                  <code>{slot.backgroundRemoval.color}</code>
-                </label>
-                <Range
-                  label="Removal tolerance"
-                  value={slot.backgroundRemoval.tolerance}
-                  min={0}
-                  max={100}
-                  onChange={(value) =>
-                    dispatch({
-                      type: "shape-background",
-                      shape: activeShape,
-                      key: "tolerance",
-                      value,
-                    })
-                  }
-                />
-                <Range
-                  label="Edge feather"
-                  value={slot.backgroundRemoval.feather}
-                  min={0}
-                  max={50}
-                  onChange={(value) =>
-                    dispatch({
-                      type: "shape-background",
-                      shape: activeShape,
-                      key: "feather",
-                      value,
-                    })
-                  }
-                />
-                <button
-                  disabled={!slot.backgroundRemoval.enabled}
-                  onClick={() =>
-                    dispatch({
-                      type: "shape-background",
-                      shape: activeShape,
-                      key: "enabled",
-                      value: false,
-                    })
-                  }
-                >
-                  Reset background removal
-                </button>
+                <div role="radiogroup" aria-label="Background removal mode" className="segments">
+                  <button role="radio" aria-checked={slot.removalMode === "keep"} className={slot.removalMode === "keep" ? "on" : ""} onClick={() => dispatch({ type: "shape-removal-mode", shape: activeShape, mode: "keep" })}>Keep original</button>
+                  <button role="radio" aria-checked={slot.removalMode === "quick"} className={slot.removalMode === "quick" ? "on" : ""} onClick={() => dispatch({ type: "shape-removal-mode", shape: activeShape, mode: "quick" })}>Quick remove</button>
+                </div>
+                <p className="tool-note" role="status">{slot.removalMode === "keep" ? "Use the image’s existing transparency. Nothing is removed." : "Remove one sampled color. Best for flat or nearly flat backgrounds."}</p>
+                {sourceHasAlpha && slot.removalMode === "keep" && <p className="tool-note" role="status">This image already contains transparency.</p>}
+                <section className="tool-note" aria-label="Smart remove beta">
+                  <b>Smart remove · Beta</b>
+                  <p>Smart Remove will identify a main subject locally in your browser. It is not included in this version.</p>
+                </section>
+                {slot.removalMode === "quick" && <>
+                  <p className="tool-note" role="status">Pick a background color, then tune how much of that color is removed.</p>
+                  <label className="color">Sampled color <input aria-label="Background color" type="color" value={slot.backgroundRemoval.color} onChange={(e) => dispatch({ type: "shape-background", shape: activeShape, key: "color", value: e.target.value })} /><code>{slot.backgroundRemoval.color}</code></label>
+                  <Range label="Removal tolerance" value={slot.backgroundRemoval.tolerance} min={0} max={100} onChange={(value) => dispatch({ type: "shape-background", shape: activeShape, key: "tolerance", value })} />
+                  <Range label="Edge feather" value={slot.backgroundRemoval.feather} min={0} max={50} onChange={(value) => dispatch({ type: "shape-background", shape: activeShape, key: "feather", value })} />
+                  <p className="tool-note">Quick remove removes similar colors everywhere in the image. It works best when the subject contrasts with one flat background.</p>
+                  <p className="tool-note">Works well: dark object on one white, blue, or solid-color backdrop. May need cleanup: shadows, gradients, patterns, reflections, or subject colors close to the background.</p>
+                  <button onClick={() => dispatch({ type: "reset-quick-remove", shape: activeShape })}>Reset Quick remove</button>
+                </>}
                 <div className="contour-tools">
                   <span className="eyebrow">CONTOUR</span>
                   <Range

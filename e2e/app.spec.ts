@@ -519,6 +519,21 @@ test("large Tessellate field export covers far corners and matches preview sampl
   expect(exported.data[exportCenter]).toBeGreaterThan(0);
 });
 
+
+test("Tessellate background modes keep source alpha separate from Quick remove", async ({ page }) => {
+  await freshStart(page);
+  await page.getByRole("button", { name: /Tessellate/ }).click();
+  await expect(page.getByRole("radiogroup", { name: "Background removal mode" })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "Keep original" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByText("Smart remove · Beta")).toBeVisible();
+  await expect(page.getByRole("slider", { name: "Removal tolerance" })).toHaveCount(0);
+  await page.getByRole("radio", { name: "Quick remove" }).click();
+  await expect(page.getByRole("slider", { name: "Removal tolerance" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reset Quick remove" })).toBeVisible();
+  await page.getByRole("button", { name: "Reset Quick remove" }).click();
+  await expect(page.getByRole("radio", { name: "Keep original" })).toHaveAttribute("aria-checked", "true");
+});
+
 test("undo and redo are scoped to the active workflow", async ({ page }) => {
   await freshStart(page);
   await page.getByRole("button", { name: /Field Tile/ }).click();

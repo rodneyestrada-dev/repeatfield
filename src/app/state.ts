@@ -272,9 +272,12 @@ export interface TileSetProject {
 export type TessellateStage = "shapes" | "assemble" | "verify" | "preview";
 export type ShapeRole = "primary" | "infill";
 
+export type RemovalMode = "keep" | "quick";
+
 export interface ShapeSlot {
   hasImage: boolean;
   asset: BrowserAssetRef | null;
+  removalMode: RemovalMode;
   backgroundRemoval: {
     enabled: boolean;
     color: string;
@@ -289,6 +292,7 @@ export function defaultShapeSlot(): ShapeSlot {
   return {
     hasImage: false,
     asset: null,
+    removalMode: "keep",
     backgroundRemoval: {
       enabled: false,
       color: "#ffffff",
@@ -547,6 +551,8 @@ export type Action =
       key: "alphaThreshold" | "simplifyTolerance";
       value: number;
     }
+  | { type: "shape-removal-mode"; shape: ShapeRole; mode: RemovalMode }
+  | { type: "reset-quick-remove"; shape: ShapeRole }
   | {
       type: "shape-background";
       shape: ShapeRole;
@@ -1046,6 +1052,39 @@ export function appReducer(state: AppState, action: Action): AppState {
           },
         },
       };
+    case "shape-removal-mode":
+      return {
+        project: {
+          ...project,
+          shapes: {
+            ...project.shapes,
+            [action.shape]: {
+              ...project.shapes[action.shape],
+              removalMode: action.mode,
+              backgroundRemoval: {
+                ...project.shapes[action.shape].backgroundRemoval,
+                enabled: action.mode === "quick",
+              },
+            },
+          },
+        },
+      };
+    case "reset-quick-remove": {
+      const initial = defaultShapeSlot().backgroundRemoval;
+      return {
+        project: {
+          ...project,
+          shapes: {
+            ...project.shapes,
+            [action.shape]: {
+              ...project.shapes[action.shape],
+              removalMode: "keep",
+              backgroundRemoval: initial,
+            },
+          },
+        },
+      };
+    }
     case "shape-background":
       return {
         project: {
