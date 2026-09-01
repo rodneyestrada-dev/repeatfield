@@ -1676,8 +1676,11 @@ h2 {
 .landing-hero p { max-width: 610px; margin: 0; color: rgba(25,22,29,.72); font-size: clamp(18px,1.8vw,24px); line-height: 1.42; letter-spacing: -.022em; }
 .landing-hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 32px; }
 .landing-hero-visual { display: grid; place-items: center; }
-.landing-tile-grid { width: min(420px,100%); display: grid; grid-template-columns: repeat(2,1fr); gap: 4px; padding: 10px; border-radius: 30px; background: rgba(255,255,255,.28); box-shadow: 0 24px 70px rgba(80,45,33,.18); }
-.landing-tile-grid img { width: 100%; aspect-ratio: 1; display: block; border-radius: 20px; background: #fff7ee; }
+.landing-hero .hero-tiles-wrap { gap: 12px; }
+.landing-hero .hero-tiles { grid-template-columns: repeat(2, minmax(132px, 1fr)); gap: 5px; width: min(420px, 100%); padding: 12px; border-radius: 30px; background: rgba(255,255,255,.28); box-shadow: 0 24px 70px rgba(80,45,33,.18); }
+.landing-hero .hero-tiles img { width: 100%; height: auto; aspect-ratio: 1; border-radius: 20px; background: #fff7ee; transition: transform 2.1s cubic-bezier(.12,.72,.22,1); }
+.landing-hero .hero-pause { min-height: 30px; border: 1px solid rgba(25,22,29,.13); border-radius: 999px; color: #19161d; background: rgba(255,255,255,.54); font: 500 9px "IBM Plex Mono", monospace; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+.landing-hero .hero-pause:hover { background: rgba(255,255,255,.82); }
 .landing-trust { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; margin-top: 24px; overflow: hidden; border: 1px solid var(--landing-line); border-radius: 30px; background: var(--landing-line); }
 .landing-trust span { display: grid; gap: 7px; padding: 20px 24px; background: var(--landing-surface); color: var(--landing-muted); font: 10px "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .08em; }
 .landing-trust b { color: var(--landing-ink); font-weight: 500; }

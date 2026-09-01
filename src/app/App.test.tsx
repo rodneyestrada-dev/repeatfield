@@ -29,6 +29,14 @@ test("hero turn scheduler chooses one tile or a diagonal pair, never adjacent ti
   expect(chooseHeroTurnTargets(sequence(0.99, 0.99))).toEqual([1, 2]);
 });
 
+test("landing restores calm hero motion and gives Tessellate a recognisable Penrose-inspired preview", () => {
+  render(<App />);
+  expect(screen.getByRole("button", { name: "Pause tile motion" })).toBeInTheDocument();
+  const tessellate = screen.getByTestId("workflow-diagram-tessellate");
+  expect(tessellate.querySelectorAll("polygon")).toHaveLength(8);
+  expect(tessellate).toHaveAttribute("aria-label", "Penrose-inspired pattern preview");
+});
+
 test("landing theme toggle exposes an immediate dark state", () => {
   render(<App />);
   const toggle = screen.getByRole("button", { name: "Switch to dark mode" });

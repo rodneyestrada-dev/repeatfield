@@ -187,11 +187,24 @@ function WorkflowDiagram({ kind }: { kind: WorkflowKind }) {
       </svg>
     );
   return (
-    <svg data-testid="workflow-diagram-tessellate" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
-      <path
-        d="M8 25 C8 13 18 7 29 15 C40 7 54 13 54 26 C54 36 46 42 38 41 L32 56 L26 41 C16 44 8 36 8 25 Z"
-        fill="#FF8C17"
-      />
+    <svg
+      data-testid="workflow-diagram-tessellate"
+      viewBox="0 0 64 64"
+      width="64"
+      height="64"
+      aria-label="Penrose-inspired pattern preview"
+      aria-hidden="true"
+    >
+      {/* A recognisable kite-and-dart rosette—not an extracted object silhouette. */}
+      <polygon points="32,8 39,25 32,32 25,25" fill="#FF8C17" />
+      <polygon points="56,32 39,39 32,32 39,25" fill="#FFD4A8" />
+      <polygon points="32,56 25,39 32,32 39,39" fill="#FF8C17" />
+      <polygon points="8,32 25,25 32,32 25,39" fill="#FFC7A1" />
+      <polygon points="15,15 25,25 18,32 8,32" fill="#B9A7EF" />
+      <polygon points="49,15 56,32 46,32 39,25" fill="#FFC7A1" />
+      <polygon points="49,49 39,39 46,32 56,32" fill="#B9A7EF" />
+      <polygon points="15,49 8,32 18,32 25,39" fill="#FFD4A8" />
+      <circle cx="32" cy="32" r="3" fill="#19161D" />
     </svg>
   );
 }
@@ -228,9 +241,7 @@ function PatternSwatch({ pattern }: { pattern: GalleryPattern }) {
 }
 
 function LandingTileGrid() {
-  return <div className="landing-tile-grid" aria-label="A four-tile Repeatfield pattern preview">
-    {[0, 90, 90, 0].map((angle, index) => <img key={index} src={LOGO} alt="" style={{ transform: `rotate(${angle}deg)` }} />)}
-  </div>;
+  return <HeroTiles />;
 }
 
 function EntryScreen({ onChoose }: { onChoose: (workflow: WorkflowKind) => void }) {
