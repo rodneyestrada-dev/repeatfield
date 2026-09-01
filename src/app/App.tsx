@@ -103,9 +103,7 @@ function projectAssetEntries(project: PatternProject | null): [string, BrowserAs
     return (["field", "border", "corner"] as const).flatMap((role) =>
       project.roles[role].asset ? [[role, project.roles[role].asset] as [string, BrowserAssetRef]] : [],
     );
-  return (["primary", "infill"] as const).flatMap((shape) =>
-    project.shapes[shape].asset ? [[shape, project.shapes[shape].asset] as [string, BrowserAssetRef]] : [],
-  );
+  return project.sourceAsset ? [["tessellate", project.sourceAsset]] : [];
 }
 
 function useProjectAssetUrls(project: PatternProject | null) {
@@ -240,7 +238,7 @@ function EntryScreen({ onChoose }: { onChoose: (workflow: WorkflowKind) => void 
   const workflows: { kind: WorkflowKind; number: string; title: string; copy: string }[] = [
     { kind: "field-tile", number: "01 / CROP → REPEAT → PREVIEW", title: "Field Tile", copy: "One square tile, turned and repeated across a surface. Straight, brick, or half-drop." },
     { kind: "tile-set", number: "02 / TILES → COMPOSE SET", title: "Tile Set", copy: "Field, Edge, and Corner composed as one family — edge runs, corner joins, shared set logic." },
-    { kind: "tessellate", number: "03 / SHAPES → ASSEMBLE → VERIFY", title: "Tessellate", copy: "Transparent shapes fitted together without hidden gaps — coverage you can verify." },
+    { kind: "tessellate", number: "03 / SQUARE CROP → PATTERN OUTPUT", title: "Tessellate", copy: "Crop a square of pattern material, then transform it into an intentional field." },
   ];
   const gallery: { pattern: GalleryPattern; title: string; type: string }[] = [
     { pattern: "aligned", title: "Aligned", type: "Field Tile" }, { pattern: "checker", title: "Checker turn", type: "Tile Turn" },
@@ -280,12 +278,7 @@ const STAGE_LABELS: Record<WorkflowKind, [string, string][]> = {
     ["compose", "Compose Set"],
     ["preview", "Preview"],
   ],
-  tessellate: [
-    ["shapes", "Shapes"],
-    ["assemble", "Repeat"],
-    ["verify", "Verify"],
-    ["preview", "Preview"],
-  ],
+  tessellate: [["crop", "Square Crop"], ["pattern", "Pattern"], ["preview", "Preview"]],
 };
 
 export function App() {
@@ -496,10 +489,10 @@ export function App() {
       <TessellateEditor
         project={project}
         dispatch={dispatch}
-        sources={{ primary: assetUrls.primary, infill: assetUrls.infill }}
-        onUpload={async (shape, file) => {
-          const asset = await replaceAsset(project.shapes[shape].asset, file);
-          dispatch({ type: "set-shape-asset", shape, asset });
+        source={assetUrls.tessellate}
+        onUpload={async (file) => {
+          const asset = await replaceAsset(project.sourceAsset, file);
+          dispatch({ type: "set-tessellate-asset", asset });
         }}
       />
     </div>

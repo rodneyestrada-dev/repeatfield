@@ -145,7 +145,7 @@ test("fresh projects are untouched while geometry and asset edits are meaningful
   expect(isProjectDirty(tileSetFresh)).toBe(false);
   expect(isProjectDirty(tessellateFresh)).toBe(false);
   expect(tileSetFresh.roles.field.asset?.type).toBe("image/png");
-  expect(tessellateFresh.shapes.primary.asset?.type).toBe("image/png");
+  expect(tessellateFresh.sourceAsset?.type).toBe("image/png");
   const edited = appReducer({ project: fresh }, {
     type: "crop-set-corner", index: 0, point: { x: 0.2, y: 0.2 },
   }).project!;
@@ -490,105 +490,42 @@ test("reset set look restores identity without touching role geometry", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tessellate: shapes, instances, lattice, history
+// Tessellate: square crop + output families
 // ---------------------------------------------------------------------------
 
-test("primary and infill shape slots stay independent", () => {
-  let s = tessellate();
-  s = appReducer(s, { type: "shape-image", shape: "primary", hasImage: true });
-  s = appReducer(s, {
-    type: "shape-background",
-    shape: "primary",
-    key: "tolerance",
-    value: 60,
-  });
-  const project = s.project as TessellateProject;
-  expect(project.shapes.primary.hasImage).toBe(true);
-  expect(project.shapes.primary.backgroundRemoval.tolerance).toBe(60);
-  expect(project.shapes.infill.hasImage).toBe(false);
-  expect(project.shapes.infill.backgroundRemoval.tolerance).toBe(28);
+test("Tessellate starts with one square-crop source and no selected output family", () => {
+  const project = createProject("tessellate") as TessellateProject;
+  expect(project.sourceAsset?.id).toBe("bundled-demo-field");
+  expect(project.crop.selectionQuad).toEqual([
+    { x: 0.12, y: 0.12 },
+    { x: 0.88, y: 0.12 },
+    { x: 0.88, y: 0.88 },
+    { x: 0.12, y: 0.88 },
+  ]);
+  expect(project.family).toBeNull();
 });
 
-test("Quick remove has explicit mode state and reset returns to original alpha", () => {
-  let s = tessellate();
-  s = appReducer(s, { type: "shape-removal-mode", shape: "primary", mode: "quick" });
-  s = appReducer(s, { type: "shape-background", shape: "primary", key: "color", value: "#123456" });
-  s = appReducer(s, { type: "shape-background", shape: "primary", key: "tolerance", value: 60 });
-  s = appReducer(s, { type: "reset-quick-remove", shape: "primary" });
-  const shape = (s.project as TessellateProject).shapes.primary;
-  expect(shape.removalMode).toBe("keep");
-  expect(shape.backgroundRemoval).toEqual({ enabled: false, color: "#ffffff", tolerance: 28, feather: 12 });
+test("Tessellate square crop resizing keeps width and height equal", () => {
+  let state = tessellate();
+  state = appReducer(state, {
+    type: "crop-set-square-corner", index: 0, point: { x: 0.3, y: 0.42 },
+  });
+  const [topLeft, topRight, bottomRight, bottomLeft] = (state.project as TessellateProject).crop.selectionQuad;
+  expect(topLeft.x).toBeCloseTo(0.3);
+  expect(topLeft.y).toBeCloseTo(0.3);
+  expect(topRight.x - topLeft.x).toBeCloseTo(bottomRight.y - topRight.y);
+  expect(bottomLeft.x).toBe(topLeft.x);
 });
 
-test("instances can be added, transformed, duplicated conceptually, and removed", () => {
-  let s = tessellate();
-  s = appReducer(s, {
-    type: "add-instance",
-    instance: {
-      id: "a",
-      shapeId: "primary",
-      position: { x: 10, y: 10 },
-      rotation: 0,
-      reflected: false,
-    },
-  });
-  s = appReducer(s, {
-    type: "update-instance",
-    id: "a",
-    patch: { rotation: 90, reflected: true },
-  });
-  let project = s.project as TessellateProject;
-  expect(project.composition.instances[0]).toMatchObject({
-    rotation: 90,
-    reflected: true,
-  });
-  expect(project.selectedInstanceId).toBe("a");
-  s = appReducer(s, { type: "remove-instance", id: "a" });
-  project = s.project as TessellateProject;
-  expect(project.composition.instances).toHaveLength(0);
-  expect(project.selectedInstanceId).toBeNull();
-});
-
-test("tessellate undo restores placements and lattice edits in order", () => {
-  let s = tessellate();
-  s = appReducer(s, {
-    type: "add-instance",
-    instance: {
-      id: "a",
-      shapeId: "primary",
-      position: { x: 0, y: 0 },
-      rotation: 0,
-      reflected: false,
-    },
-  });
-  s = appReducer(s, {
-    type: "set-lattice",
-    lattice: { u: { x: 200, y: 0 }, v: { x: 0, y: 200 } },
-  });
-  s = appReducer(s, { type: "undo" });
-  let project = s.project as TessellateProject;
-  expect(project.composition.lattice.u.x).toBe(320);
-  expect(project.composition.instances).toHaveLength(1);
-  s = appReducer(s, { type: "undo" });
-  project = s.project as TessellateProject;
-  expect(project.composition.instances).toHaveLength(0);
-});
-
-test("output and grout modes are explicit tessellate settings", () => {
-  let s = tessellate();
-  s = appReducer(s, {
-    type: "tessellate-comp",
-    key: "outputMode",
-    value: "medallion",
-  });
-  s = appReducer(s, {
-    type: "tessellate-comp",
-    key: "groutMode",
-    value: "grout",
-  });
-  const project = s.project as TessellateProject;
-  expect(project.composition.outputMode).toBe("medallion");
-  expect(project.composition.groutMode).toBe("grout");
+test("Tessellate stores a selected output family and visibly relevant controls", () => {
+  let state = tessellate();
+  state = appReducer(state, { type: "set-tessellate-family", family: "prism" });
+  state = appReducer(state, { type: "tessellate-control", key: "density", value: 7 });
+  const project = state.project as TessellateProject;
+  expect(project.family).toBe("prism");
+  expect(project.controls.density).toBe(7);
+  state = appReducer(state, { type: "undo" });
+  expect((state.project as TessellateProject).controls.density).toBe(4);
 });
 
 // ---------------------------------------------------------------------------
@@ -614,13 +551,13 @@ test("field-tile actions do not leak into tile-set or tessellate projects", () =
   const beforeT = t;
   t = appReducer(t, { type: "field-comp", key: "gap", value: 10 });
   expect(t).toBe(beforeT);
-  // tessellate ignores lasso crop actions entirely
+  // Tessellate now supports its dedicated square crop action.
   t = appReducer(t, {
-    type: "crop-set-corner",
+    type: "crop-set-square-corner",
     index: 0,
     point: { x: 0.5, y: 0.5 },
   });
-  expect(t).toBe(beforeT);
+  expect(t).not.toBe(beforeT);
 });
 
 test("history is bounded to fifty snapshots", () => {

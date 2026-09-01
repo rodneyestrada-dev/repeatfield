@@ -20,10 +20,6 @@ import type {
   TileRole,
   TileRotation,
 } from "../engine/frameLayout";
-import type {
-  RepeatLattice,
-  ShapeInstance,
-} from "../engine/tessellation";
 import type { SegmentCount } from "../engine/patterns";
 
 // ---------------------------------------------------------------------------
@@ -64,7 +60,7 @@ export const DEMO_ASSETS = {
     corner: { ...DEMO_ASSET, id: "bundled-demo-corner", name: "Demo Corner tile" },
   },
   tessellate: {
-    primary: { ...DEMO_ASSET, id: "bundled-demo-petal", name: "Demo shape" },
+    source: { ...DEMO_ASSET, id: "bundled-demo-field", name: "Demo pattern source" },
   },
 } as const;
 
@@ -266,78 +262,44 @@ export interface TileSetProject {
 }
 
 // ---------------------------------------------------------------------------
-// Tessellate project — Primary / Infill shapes, Repeat Cell, coverage.
+// Tessellate project — one opaque square crop → pattern-family output.
 // ---------------------------------------------------------------------------
 
-export type TessellateStage = "shapes" | "assemble" | "verify" | "preview";
-export type ShapeRole = "primary" | "infill";
+export type TessellateStage = "crop" | "pattern" | "preview";
+export type TessellateFamily =
+  | "penrose-inspired"
+  | "kaleidoscope"
+  | "tetra"
+  | "triangles"
+  | "prism";
 
-export type RemovalMode = "keep" | "quick";
-
-export interface ShapeSlot {
-  hasImage: boolean;
-  asset: BrowserAssetRef | null;
-  removalMode: RemovalMode;
-  backgroundRemoval: {
-    enabled: boolean;
-    color: string;
-    tolerance: number;
-    feather: number;
-  };
-  alphaThreshold: number;
-  simplifyTolerance: number;
+/** Only controls that visibly affect the selected output are retained. */
+export interface TessellateControls {
+  scale: number;
+  rotation: number;
+  mirror: boolean;
+  density: number;
+  segments: number;
 }
 
-export function defaultShapeSlot(): ShapeSlot {
-  return {
-    hasImage: false,
-    asset: null,
-    removalMode: "keep",
-    backgroundRemoval: {
-      enabled: false,
-      color: "#ffffff",
-      tolerance: 28,
-      feather: 12,
-    },
-    alphaThreshold: 128,
-    simplifyTolerance: 2,
-  };
-}
-
-/** Tessellate primary slot preloaded with the bundled demo shape. */
-export function primaryWithDemo(): ShapeSlot {
-  return { ...defaultShapeSlot(), hasImage: true, asset: { ...DEMO_ASSETS.tessellate.primary } };
-}
-
-export interface TessellateComposition {
-  instances: ShapeInstance[];
-  lattice: RepeatLattice;
-  outputMode: "field" | "medallion";
-  groutMode: "touching" | "grout";
-  groutWidth: number;
-  showDiagnostics: boolean;
-  showGhostCells: boolean;
-}
-
-export const DEFAULT_TESSELLATE_COMPOSITION: TessellateComposition = {
-  instances: [],
-  lattice: { u: { x: 320, y: 0 }, v: { x: 0, y: 320 } },
-  outputMode: "field",
-  groutMode: "touching",
-  groutWidth: 0,
-  showDiagnostics: true,
-  showGhostCells: true,
+export const DEFAULT_TESSELLATE_CONTROLS: TessellateControls = {
+  scale: 120,
+  rotation: 0,
+  mirror: true,
+  density: 4,
+  segments: 8,
 };
 
 export interface TessellateProject {
   id: string;
   workflow: "tessellate";
   stage: TessellateStage;
-  activeShape: ShapeRole;
-  shapes: Record<ShapeRole, ShapeSlot>;
-  composition: TessellateComposition;
-  selectedInstanceId: string | null;
-  history: { past: TessellateComposition[]; future: TessellateComposition[] };
+  sourceAsset: BrowserAssetRef | null;
+  crop: CropState;
+  family: TessellateFamily | null;
+  controls: TessellateControls;
+  migrationNotice?: boolean;
+  history: { past: TessellateControls[]; future: TessellateControls[] };
 }
 
 // ---------------------------------------------------------------------------
@@ -388,18 +350,11 @@ export function createProject(workflow: WorkflowKind): PatternProject {
   return {
     id: newProjectId(),
     workflow,
-    stage: "shapes",
-    activeShape: "primary",
-    shapes: { primary: primaryWithDemo(), infill: defaultShapeSlot() },
-    composition: {
-      ...DEFAULT_TESSELLATE_COMPOSITION,
-      instances: [],
-      lattice: {
-        u: { ...DEFAULT_TESSELLATE_COMPOSITION.lattice.u },
-        v: { ...DEFAULT_TESSELLATE_COMPOSITION.lattice.v },
-      },
-    },
-    selectedInstanceId: null,
+    stage: "crop",
+    sourceAsset: { ...DEMO_ASSETS.tessellate.source },
+    crop: defaultCropState(),
+    family: null,
+    controls: { ...DEFAULT_TESSELLATE_CONTROLS },
     history: { past: [], future: [] },
   };
 }
@@ -419,7 +374,7 @@ export function validateTileSet(project: PatternProject): boolean {
     (["field", "border", "corner"] as const).every((role) => Boolean(project.roles[role].asset));
 }
 export function validateTessellate(project: PatternProject): boolean {
-  return project.workflow === "tessellate" && project.shapes.primary.hasImage;
+  return project.workflow === "tessellate" && Boolean(project.sourceAsset);
 }
 
 // ---------------------------------------------------------------------------
@@ -473,10 +428,23 @@ export function deserializeProject(raw: string | null): PatternProject | null {
         project.roles[role].hasImage = Boolean(project.roles[role].asset);
       }
     } else {
-      for (const shape of ["primary", "infill"] as const) {
-        project.shapes[shape].asset ??= null;
-        project.shapes[shape].hasImage = Boolean(project.shapes[shape].asset);
+      // The contour/shape project cannot be truthfully converted into a
+      // square source. Keep the project, but require a deliberate re-crop.
+      if (!("sourceAsset" in project)) {
+        project.stage = "crop";
+        project.sourceAsset = null;
+        project.crop = defaultCropState();
+        project.family = null;
+        project.controls = { ...DEFAULT_TESSELLATE_CONTROLS };
+        project.migrationNotice = true;
+        project.history = { past: [], future: [] };
       }
+      project.sourceAsset ??= null;
+      project.crop ??= defaultCropState();
+      project.controls = { ...DEFAULT_TESSELLATE_CONTROLS, ...(project.controls ?? {}) };
+      if (!["crop", "pattern", "preview"].includes(project.stage)) project.stage = "crop";
+      if (!project.family || !["penrose-inspired", "kaleidoscope", "tetra", "triangles", "prism"].includes(project.family)) project.family = null;
+      project.history ??= { past: [], future: [] };
     }
     return project as PatternProject;
   } catch {
@@ -490,6 +458,7 @@ export function deserializeProject(raw: string | null): PatternProject | null {
 
 type CropAction =
   | { type: "crop-set-corner"; index: number; point: Point }
+  | { type: "crop-set-square-corner"; index: number; point: Point }
   | { type: "crop-set-warp-pin"; index: number; point: Point }
   | { type: "crop-translate-selection"; delta: Point }
   | { type: "crop-rotate" }
@@ -542,33 +511,9 @@ export type Action =
   | { type: "corner-override"; corner: FrameCorner; rotation: TileRotation | null }
   | { type: "set-look"; key: keyof SetLook; value: number }
   | { type: "reset-set-look" }
-  | { type: "set-active-shape"; shape: ShapeRole }
-  | { type: "shape-image"; shape: ShapeRole; hasImage: boolean }
-  | { type: "set-shape-asset"; shape: ShapeRole; asset: BrowserAssetRef }
-  | {
-      type: "shape-setting";
-      shape: ShapeRole;
-      key: "alphaThreshold" | "simplifyTolerance";
-      value: number;
-    }
-  | { type: "shape-removal-mode"; shape: ShapeRole; mode: RemovalMode }
-  | { type: "reset-quick-remove"; shape: ShapeRole }
-  | {
-      type: "shape-background";
-      shape: ShapeRole;
-      key: "enabled" | "color" | "tolerance" | "feather";
-      value: boolean | string | number;
-    }
-  | { type: "add-instance"; instance: ShapeInstance }
-  | { type: "update-instance"; id: string; patch: Partial<ShapeInstance> }
-  | { type: "remove-instance"; id: string }
-  | { type: "select-instance"; id: string | null }
-  | {
-      type: "tessellate-comp";
-      key: keyof Omit<TessellateComposition, "instances" | "lattice">;
-      value: TessellateComposition[keyof TessellateComposition];
-    }
-  | { type: "set-lattice"; lattice: RepeatLattice }
+  | { type: "set-tessellate-asset"; asset: BrowserAssetRef }
+  | { type: "set-tessellate-family"; family: TessellateFamily }
+  | { type: "tessellate-control"; key: keyof TessellateControls; value: number | boolean }
   | { type: "undo" }
   | { type: "redo" };
 
@@ -607,6 +552,26 @@ const MIN_SPAN = 0.01;
 
 function reduceCrop(crop: CropState, action: CropAction): CropState {
   switch (action.type) {
+    case "crop-set-square-corner": {
+      const index = ((action.index % 4) + 4) % 4;
+      const opposite = crop.selectionQuad[(index + 2) % 4];
+      const previous = crop.selectionQuad[index];
+      const signX = previous.x >= opposite.x ? 1 : -1;
+      const signY = previous.y >= opposite.y ? 1 : -1;
+      const size = Math.max(
+        MIN_SPAN,
+        Math.min(
+          Math.max(Math.abs(action.point.x - opposite.x), Math.abs(action.point.y - opposite.y)),
+          signX > 0 ? 1 - opposite.x : opposite.x,
+          signY > 0 ? 1 - opposite.y : opposite.y,
+        ),
+      );
+      const point = { x: opposite.x + signX * size, y: opposite.y + signY * size };
+      const selectionQuad = index % 2 === 0
+        ? [point, { x: opposite.x, y: point.y }, opposite, { x: point.x, y: opposite.y }]
+        : [{ x: opposite.x, y: point.y }, point, { x: point.x, y: opposite.y }, opposite];
+      return { ...crop, selectionQuad: selectionQuad as unknown as Quad };
+    }
     case "crop-set-corner": {
       // Rect-preserving resize: the opposite corner stays anchored and the
       // two adjacent corners follow the drag, so the selection can grow or
@@ -706,6 +671,7 @@ function reduceCrop(crop: CropState, action: CropAction): CropState {
 
 const CROP_ACTIONS = new Set([
   "crop-set-corner",
+  "crop-set-square-corner",
   "crop-set-warp-pin",
   "crop-translate-selection",
   "crop-rotate",
@@ -751,7 +717,9 @@ export function appReducer(state: AppState, action: Action): AppState {
         },
       };
     }
-    return state; // Tessellate has no lasso/warp crop; shapes use shape-background.
+    return {
+      project: { ...project, crop: reduceCrop(project.crop, cropAction) },
+    };
   }
 
   switch (action.type) {
@@ -759,7 +727,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       const stages: Record<WorkflowKind, string[]> = {
         "field-tile": ["crop", "repeat", "preview"],
         "tile-set": ["tiles", "compose", "preview"],
-        tessellate: ["shapes", "assemble", "verify", "preview"],
+        tessellate: ["crop", "pattern", "preview"],
       };
       if (!stages[project.workflow].includes(action.stage)) return state;
       if (project.workflow === "tile-set" && action.stage !== "tiles" && !validateTileSet(project))
@@ -804,10 +772,10 @@ export function appReducer(state: AppState, action: Action): AppState {
       return {
         project: {
           ...project,
-          composition: previous,
+          controls: previous,
           history: {
             past: project.history.past.slice(0, -1),
-            future: [project.composition, ...project.history.future],
+            future: [project.controls, ...project.history.future],
           },
         },
       };
@@ -850,9 +818,9 @@ export function appReducer(state: AppState, action: Action): AppState {
       return {
         project: {
           ...project,
-          composition: next,
+          controls: next,
           history: {
-            past: [...project.history.past, project.composition].slice(
+            past: [...project.history.past, project.controls].slice(
               -HISTORY_LIMIT,
             ),
             future,
@@ -1003,152 +971,33 @@ export function appReducer(state: AppState, action: Action): AppState {
     return state;
   }
 
-  // Tessellate
-  const withComposition = (
-    composition: TessellateComposition,
-  ): AppState => ({
+  // Tessellate — an opaque square crop and a selected pattern family only.
+  const withControls = (controls: TessellateControls): AppState => ({
     project: {
       ...project,
-      composition,
-      history: pushHistory(project.history, project.composition),
+      controls,
+      history: pushHistory(project.history, project.controls),
     },
   });
   switch (action.type) {
-    case "set-active-shape":
-      return { project: { ...project, activeShape: action.shape } };
-    case "shape-image":
+    case "set-tessellate-asset":
       return {
         project: {
           ...project,
-          shapes: {
-            ...project.shapes,
-            [action.shape]: {
-              ...project.shapes[action.shape],
-              hasImage: action.hasImage,
-            },
-          },
+          sourceAsset: action.asset,
+          migrationNotice: false,
         },
       };
-    case "set-shape-asset":
-      return {
-        project: {
-          ...project,
-          shapes: {
-            ...project.shapes,
-            [action.shape]: { ...project.shapes[action.shape], hasImage: true, asset: action.asset },
-          },
-        },
-      };
-    case "shape-setting":
-      return {
-        project: {
-          ...project,
-          shapes: {
-            ...project.shapes,
-            [action.shape]: {
-              ...project.shapes[action.shape],
-              [action.key]: action.value,
-            },
-          },
-        },
-      };
-    case "shape-removal-mode":
-      return {
-        project: {
-          ...project,
-          shapes: {
-            ...project.shapes,
-            [action.shape]: {
-              ...project.shapes[action.shape],
-              removalMode: action.mode,
-              backgroundRemoval: {
-                ...project.shapes[action.shape].backgroundRemoval,
-                enabled: action.mode === "quick",
-              },
-            },
-          },
-        },
-      };
-    case "reset-quick-remove": {
-      const initial = defaultShapeSlot().backgroundRemoval;
-      return {
-        project: {
-          ...project,
-          shapes: {
-            ...project.shapes,
-            [action.shape]: {
-              ...project.shapes[action.shape],
-              removalMode: "keep",
-              backgroundRemoval: initial,
-            },
-          },
-        },
-      };
+    case "set-tessellate-family":
+      return { project: { ...project, family: action.family } };
+    case "tessellate-control": {
+      let value = action.value;
+      if (action.key === "scale") value = Math.max(40, Math.min(300, Number(value)));
+      if (action.key === "density") value = Math.max(2, Math.min(10, Number(value)));
+      if (action.key === "segments") value = Math.max(3, Math.min(16, Math.round(Number(value))));
+      if (Object.is(project.controls[action.key], value)) return state;
+      return withControls({ ...project.controls, [action.key]: value });
     }
-    case "shape-background":
-      return {
-        project: {
-          ...project,
-          shapes: {
-            ...project.shapes,
-            [action.shape]: {
-              ...project.shapes[action.shape],
-              backgroundRemoval: {
-                ...project.shapes[action.shape].backgroundRemoval,
-                [action.key]: action.value,
-              },
-            },
-          },
-        },
-      };
-    case "add-instance":
-      return {
-        project: {
-          ...(withComposition({
-            ...project.composition,
-            instances: [...project.composition.instances, action.instance],
-          }).project as TessellateProject),
-          selectedInstanceId: action.instance.id,
-        },
-      };
-    case "update-instance":
-      return withComposition({
-        ...project.composition,
-        instances: project.composition.instances.map((instance) =>
-          instance.id === action.id
-            ? { ...instance, ...action.patch }
-            : instance,
-        ),
-      });
-    case "remove-instance":
-      return {
-        project: {
-          ...(withComposition({
-            ...project.composition,
-            instances: project.composition.instances.filter(
-              (instance) => instance.id !== action.id,
-            ),
-          }).project as TessellateProject),
-          selectedInstanceId:
-            project.selectedInstanceId === action.id
-              ? null
-              : project.selectedInstanceId,
-        },
-      };
-    case "select-instance":
-      return { project: { ...project, selectedInstanceId: action.id } };
-    case "tessellate-comp":
-      if (Object.is(project.composition[action.key], action.value))
-        return state;
-      return withComposition({
-        ...project.composition,
-        [action.key]: action.value,
-      });
-    case "set-lattice":
-      return withComposition({
-        ...project.composition,
-        lattice: action.lattice,
-      });
   }
   return state;
 }
@@ -1170,7 +1019,7 @@ export function isProjectDirty(project: PatternProject): boolean {
     return Object.values(project.roles).some((role) => role.asset?.kind === "indexeddb" || cropMeaningful(role.crop)) ||
       JSON.stringify(project.composition) !== JSON.stringify(DEFAULT_TILE_SET_COMPOSITION) ||
       JSON.stringify(project.setLook) !== JSON.stringify(DEFAULT_LOOK);
-  return Object.values(project.shapes).some((shape) => shape.asset?.kind === "indexeddb" ||
-      JSON.stringify({ ...shape, asset: null, hasImage: false }) !== JSON.stringify(defaultShapeSlot())) ||
-    JSON.stringify(project.composition) !== JSON.stringify(DEFAULT_TESSELLATE_COMPOSITION);
+  return project.sourceAsset?.kind === "indexeddb" || cropMeaningful(project.crop) ||
+    project.family !== null ||
+    JSON.stringify(project.controls) !== JSON.stringify(DEFAULT_TESSELLATE_CONTROLS);
 }

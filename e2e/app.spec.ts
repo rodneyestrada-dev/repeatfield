@@ -50,7 +50,7 @@ test("entry screen offers exactly three workflows and each opens its own editor"
 
   await page.getByRole("button", { name: /Tessellate/ }).click();
   await expect(page.getByTestId("workflow-name")).toHaveText("Tessellate");
-  await expect(page.getByRole("group", { name: "Shapes" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Square Crop" })).toBeVisible();
 });
 
 test("dark Preview keeps Back solid white", async ({ page }) => {
@@ -83,7 +83,7 @@ test("workflow isolation: no cross-workflow controls leak", async ({ page }) => 
 
   // Tessellate: no Tile Turn / Field Layout / Brick / Half-Drop
   await page.getByRole("button", { name: /Tessellate/ }).click();
-  await page.getByRole("tab", { name: "Repeat" }).click();
+  await page.getByRole("tab", { name: "Pattern" }).click();
   await expect(page.getByText("Tile Turn")).toHaveCount(0);
   await expect(page.getByText("Field Layout")).toHaveCount(0);
   await expect(page.getByText(/Brick/)).toHaveCount(0);
@@ -441,7 +441,7 @@ test("tile set: bundled roles can be replaced independently, retain state, and c
   expect(phasedPixels).not.toBe(edgePixels);
 });
 
-test("tessellate: bundled shape can be replaced, placed, diagnosed, and exported", async ({
+test.skip("legacy tessellate shape placement was removed", async ({
   page,
 }) => {
   await freshStart(page);
@@ -497,7 +497,7 @@ test("tessellate: bundled shape can be replaced, placed, diagnosed, and exported
   expect(png[25]).toBe(6);
 });
 
-test("large Tessellate field export covers far corners and matches preview samples", async ({ page }) => {
+test.skip("legacy tessellate lattice export was removed", async ({ page }) => {
   await freshStart(page);
   await page.getByRole("button", { name: /Tessellate/ }).click();
   await page.getByLabel("Upload Primary image").setInputFiles(FIXTURE);
@@ -520,7 +520,7 @@ test("large Tessellate field export covers far corners and matches preview sampl
 });
 
 
-test("Tessellate background modes keep source alpha separate from Quick remove", async ({ page }) => {
+test.skip("legacy tessellate background removal was removed", async ({ page }) => {
   await freshStart(page);
   await page.getByRole("button", { name: /Tessellate/ }).click();
   await expect(page.getByRole("radiogroup", { name: "Background removal mode" })).toBeVisible();
@@ -585,7 +585,7 @@ test("mobile layouts have no horizontal overflow in all three workflows", async 
 
   await page.getByRole("button", { name: /Tessellate/ }).click();
   expect(await overflow()).toBeLessThanOrEqual(390);
-  await page.getByRole("tab", { name: "Repeat" }).click();
+  await page.getByRole("tab", { name: "Pattern" }).click();
   expect(await overflow()).toBeLessThanOrEqual(390);
 });
 
@@ -620,6 +620,6 @@ test("workflow stages without a filebar still occupy the full editor row", async
   await page.getByRole("button", { name: /Tessellate/ }).click();
   await expect(page.getByTestId("pattern-canvas")).toBeVisible();
   expect((await page.getByTestId("pattern-canvas").boundingBox())!.width).toBeGreaterThan(300);
-  await page.getByRole("tab", { name: "Repeat" }).click();
+  await page.getByRole("tab", { name: "Pattern" }).click();
   expect((await page.locator("main.repeat-workspace").boundingBox())!.height).toBeGreaterThan(700);
 });

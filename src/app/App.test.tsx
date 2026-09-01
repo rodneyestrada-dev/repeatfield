@@ -95,25 +95,26 @@ test("Tile Set role switching preserves each role's state", () => {
   expect(
     screen.getByLabelText("Upload Edge image"),
   ).toBeInTheDocument();
+  expect(screen.getByText("Edge Run check")).toBeInTheDocument();
+  expect(screen.getByText("Field–Edge join")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /Corner/ }));
   expect(
     screen.getByLabelText("Upload Corner image"),
   ).toBeInTheDocument();
+  expect(screen.getByText("Corner Join check")).toBeInTheDocument();
 });
 
-test("Tessellate opens with Primary/Infill and no Tile Turn or Field/Edge/Corner roles", () => {
+test("Tessellate opens as a square-crop pattern workflow with five honest output families", () => {
   render(<App />);
   fireEvent.click(screen.getByRole("button", { name: /Tessellate/ }));
   expect(screen.getByTestId("workflow-name")).toHaveTextContent("Tessellate");
-  const shapes = screen.getByRole("group", { name: "Shapes" });
-  expect(shapes).toHaveTextContent("Primary");
-  expect(shapes).toHaveTextContent("Infill");
-  expect(screen.queryByText("Tile Turn")).not.toBeInTheDocument();
-  expect(screen.queryByText("Field Layout")).not.toBeInTheDocument();
-  expect(screen.queryByText(/edge run/i)).not.toBeInTheDocument();
-  expect(screen.queryByText(/corner join/i)).not.toBeInTheDocument();
-  expect(screen.queryByText(/brick/i)).not.toBeInTheDocument();
-  expect(screen.queryByText(/half-drop/i)).not.toBeInTheDocument();
+  expect(screen.getByText(/Crop what you want to repeat/i)).toBeInTheDocument();
+  for (const family of ["Penrose-inspired", "Kaleidoscope", "Tetra", "Triangles", "Prism"])
+    expect(screen.getByText(family)).toBeInTheDocument();
+  expect(screen.queryByText(/Primary/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Infill/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Repeat Cell/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/coverage/i)).not.toBeInTheDocument();
 });
 
 test("the workflow choice persists across reload", () => {
@@ -272,18 +273,12 @@ test("field layout options live under Field Layout, symmetry under Advanced", ()
   expect(advanced).toHaveTextContent("Radial Kaleidoscope");
 });
 
-test("tessellate coverage panel reports honestly when nothing is placed", () => {
+test("Tessellate crop does not expose removed contour or repeat-cell controls", () => {
   render(<App />);
   fireEvent.click(screen.getByRole("button", { name: /Tessellate/ }));
-  // jump to assemble stage
-  fireEvent.click(screen.getByRole("tab", { name: "Repeat" }));
-  expect(screen.getByTestId("coverage-status")).toHaveTextContent(
-    /place at least one shape/i,
-  );
-  expect(screen.getByRole("group", { name: "Output mode" })).toHaveTextContent(
-    "Medallion",
-  );
-  expect(
-    screen.getByRole("group", { name: "Spacing mode" }),
-  ).toHaveTextContent("Touching");
+  expect(screen.getByRole("tab", { name: "Square Crop" })).toBeInTheDocument();
+  expect(screen.queryByText(/Primary/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Infill/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/coverage/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/repeat cell/i)).not.toBeInTheDocument();
 });

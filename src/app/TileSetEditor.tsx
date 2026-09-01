@@ -13,6 +13,12 @@ const ROLE_LABELS: Record<TileRole, string> = {
 };
 const ROLES: TileRole[] = ["field", "border", "corner"];
 
+function TileSetDiagnostics({ role }: { role: TileRole }) {
+  if (role === "field") return <div className="crop-guide" data-testid="tile-set-diagnostics"><span className="eyebrow">FIELD SEAM CHECK</span><p>Inspect the 2 × 2 Field join.</p></div>;
+  if (role === "border") return <div className="crop-guide" data-testid="tile-set-diagnostics"><span className="eyebrow">Edge Run check</span><p>Inspect the repeated Edge strip and the <span>Field–Edge join</span>.</p></div>;
+  return <div className="crop-guide" data-testid="tile-set-diagnostics"><span className="eyebrow">Corner Join check</span><p>Inspect the L-shaped Edge–Corner transition.</p></div>;
+}
+
 export function TileSetEditor({
   project,
   dispatch,
@@ -108,6 +114,7 @@ export function TileSetEditor({
                 dispatch({ type: "set-stage", stage: "compose" })
               }
               aside={
+                <>
                 <div className="crop-guide">
                   <span className="eyebrow">
                     EDITING {ROLE_LABELS[activeRole].toUpperCase()} TILE
@@ -121,6 +128,8 @@ export function TileSetEditor({
                       "The Corner tile turns the Edge through 90°."}
                   </h2>
                 </div>
+                <TileSetDiagnostics role={activeRole} />
+                </>
               }
             />
           ) : (
@@ -131,6 +140,7 @@ export function TileSetEditor({
                 one coordinated installation. Upload a square photo or scan
                 for the {ROLE_LABELS[activeRole]} role.
               </p>
+              <TileSetDiagnostics role={activeRole} />
               <div className="crop-action-bar">
                 <button
                   className="primary continue"

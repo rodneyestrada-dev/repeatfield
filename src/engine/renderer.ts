@@ -7,14 +7,23 @@ import { applyLook, isDefaultLook, type SetLook } from "./appearance";
 import type {
   CropState,
   FieldComposition,
-  TessellateComposition,
   TileSetComposition,
 } from "../app/state";
-import type { ShapeInstance } from "./tessellation";
+import type { RepeatLattice, ShapeInstance } from "./tessellation";
 import { analyzeParallelogramCoverage, type CoverageResult, type StampMask } from "./coverage";
 
 type SizedSource = CanvasImageSource & { width: number; height: number };
 type P = { x: number; y: number };
+
+// Kept private solely to retain the former renderer helpers for persisted
+// browser sessions; no project state or UI can construct this model anymore.
+interface TessellateComposition {
+  instances: ShapeInstance[];
+  lattice: RepeatLattice;
+  outputMode: "field" | "medallion";
+  groutMode: "touching" | "grout";
+  groutWidth: number;
+}
 
 function canvas(width: number, height: number) {
   const result = document.createElement("canvas");

@@ -124,10 +124,12 @@ function CropCanvas({
   img,
   crop,
   dispatch,
+  selectionMode = "free",
 }: {
   img: HTMLImageElement | null;
   crop: CropState;
   dispatch: (action: Action) => void;
+  selectionMode?: "free" | "square";
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const insetRef = useRef<HTMLCanvasElement>(null);
@@ -199,7 +201,9 @@ function CropCanvas({
     if (!current || !ref.current) return;
     const point = toSource(e.clientX, e.clientY);
     if (current.kind === "corner")
-      dispatch({ type: "crop-set-corner", index: current.index, point });
+      dispatch(selectionMode === "square"
+        ? { type: "crop-set-square-corner", index: current.index, point }
+        : { type: "crop-set-corner", index: current.index, point });
     else if (current.kind === "pin") {
       // Convert absolute source point back into selection-relative units by
       // solving through the selection quad's inverse homography.
@@ -365,6 +369,8 @@ export function CropWorkspace({
   onContinue,
   aside,
   showSeam = true,
+  selectionMode = "free",
+  allowBackground = true,
 }: {
   img: HTMLImageElement | null;
   crop: CropState;
@@ -373,6 +379,8 @@ export function CropWorkspace({
   onContinue: () => void;
   aside?: React.ReactNode;
   showSeam?: boolean;
+  selectionMode?: "free" | "square";
+  allowBackground?: boolean;
 }) {
   const seamRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -402,7 +410,7 @@ export function CropWorkspace({
     <div className="crop-shell">
       <div className="crop-body">
         <div className="tool-dock" role="toolbar" aria-label="Crop tools">
-          {CROP_TOOLS.map((tool) => (
+          {CROP_TOOLS.filter((tool) => allowBackground || tool.id !== "background").map((tool) => (
             <button
               key={tool.id}
               className="tool-button"
@@ -431,7 +439,7 @@ export function CropWorkspace({
           ))}
         </div>
         <section className="crop-stage">
-          <CropCanvas img={img} crop={crop} dispatch={dispatch} />
+          <CropCanvas img={img} crop={crop} dispatch={dispatch} selectionMode={selectionMode} />
           {crop.openToolOptions && (
             <CropToolOptions
               tool={crop.openToolOptions}
