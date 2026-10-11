@@ -1,0 +1,2 @@
+# Cross-lane handoffs land in `handoffs/<lane>/<artifact>.vN`.
+# Outputs are immutable and versioned; consumers pin a version in their task contract.
